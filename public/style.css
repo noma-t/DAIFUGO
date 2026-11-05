@@ -181,6 +181,9 @@ button, input, select { font-family: inherit; }
 #hand .card.sel { border-color: var(--accent); }
 #hand .card.pick { border-color: var(--red); }
 #hand .card.ghosted { opacity: 0.3; }
+#hand .card.hint { border-color: #ffffff; box-shadow: 0 0 0 2px #ffffff, 4px 4px 0 var(--ink); }
+#hand .card.dim { filter: brightness(0.5); }
+#hand .card.nogo { cursor: not-allowed; }
 #hand.locked .card { cursor: default; }
 
 #mePanel { position: absolute; left: 1100px; top: 540px; width: 140px; display: flex; flex-direction: column; gap: 12px; }

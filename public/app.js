@@ -7,7 +7,7 @@
 
   const S = {
     scale: 1, code: null, token: null, es: null, view: null, screen: null, offset: 0,
-    sel: new Set(), csel: new Set(), picks: [], dlgKey: null, choiceKey: null,
+    sel: new Set(), groups: [], csel: new Set(), picks: [], dlgKey: null, choiceKey: null,
     ptr: null, handPos: {}, fieldEls: new Map(), handEls: new Map(), oppPos: {},
     banners: [], bannerTimer: null
   };
@@ -452,6 +452,47 @@
     return i => i * step;
   }
 
+  // 自分の番に出せる手（ビューごとにキャッシュ）
+  function turnMoves(g) {
+    if (!myTurn(g) || choiceMode(g)) return null;
+    if (S.movesFor !== g) {
+      S.movesFor = g;
+      S.moves = E.legalMovesCtx(g.ctx, g.hand).map(m => new Set(m.ids));
+    }
+    return S.moves;
+  }
+  function fitsMove(moves, ids) { return moves.some(m => ids.every(id => m.has(id))); }
+
+  // カードを選択に加える。今の選択と一緒に出せないなら、出せる組み合わせだけ残して入れ替える
+  function selectPlayable(g, id) {
+    const moves = turnMoves(g);
+    if (!moves) { S.sel.add(id); return true; }
+    const withC = moves.filter(m => m.has(id));
+    if (!withC.length) return false;
+    const order = Array.from(S.sel);
+    let best = [], bs = -1;
+    for (const m of withC) {
+      const keep = order.filter(x => m.has(x));
+      const sc = keep.length * 1000 + keep.reduce((a, x) => a + order.indexOf(x), 0);
+      if (sc > bs) { bs = sc; best = keep; }
+    }
+    S.sel = new Set(best.concat([id]));
+    // 他に選びようがないカードは同時に選択する（例：ジョーカーなしで2枚出しのペア）
+    const cur = Array.from(S.sel);
+    const done = moves.some(m => m.size === cur.length && cur.every(x => m.has(x)));
+    if (!done) {
+      const cands = moves.filter(m => cur.every(x => m.has(x)));
+      if (cands.length) {
+        const forced = Array.from(cands[0]).filter(x => !S.sel.has(x) && cands.every(m => m.has(x)));
+        if (forced.length) {
+          forced.forEach(x => S.sel.add(x));
+          S.groups.push(new Set([id].concat(forced)));
+        }
+      }
+    }
+    return true;
+  }
+
   function renderHand(g) {
     const hand = g.hand;
     const ids = new Set(hand.map(c => c.id));
@@ -461,6 +502,10 @@
     const cm = choiceMode(g);
     const lx = handLayout(hand.length);
     const dragging = S.ptr && S.ptr.active;
+    const moves = turnMoves(g);
+    if (moves && S.sel.size && !fitsMove(moves, Array.from(S.sel))) S.sel.clear();
+    const selArr = Array.from(S.sel);
+    S.groups = S.groups.filter(gr => Array.from(gr).every(x => S.sel.has(x)));
     S.handPos = {};
     hand.forEach((c, i) => {
       let el = S.handEls.get(c.id);
@@ -480,7 +525,20 @@
       el.classList.toggle('pick', on && !!cm);
       el.classList.toggle('ghosted', !!(dragging && on && !cm));
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
-      const x = lx(i), y = on ? 0 : 18;
+      let playable = true, hint = false, dim = false;
+      if (moves) {
+        playable = moves.some(m => m.has(c.id));
+        if (!playable) dim = true;
+        else if (!on && selArr.length) {
+          hint = moves.some(m => m.has(c.id) && selArr.every(x => m.has(x)));
+          dim = !hint;
+        }
+      }
+      el.classList.toggle('dim', dim);
+      el.classList.toggle('nogo', !playable);
+      el.classList.toggle('hint', hint);
+      el.setAttribute('aria-disabled', playable ? 'false' : 'true');
+      const x = lx(i), y = on ? 0 : hint ? 8 : 18;
       el.style.left = x + 'px';
       el.style.top = y + 'px';
       el.style.zIndex = i + 1;
@@ -538,7 +596,12 @@
         S.csel.add(id);
       }
     } else {
-      if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id);
+      if (S.sel.has(id)) {
+        // 同時に選択されたカードはまとめて解除
+        const gr = S.groups.find(x => x.has(id));
+        if (gr) { gr.forEach(x => S.sel.delete(x)); S.groups = S.groups.filter(x => x !== gr); }
+        else S.sel.delete(id);
+      } else if (!selectPlayable(g, id)) return;
     }
     refreshHand();
   }
@@ -566,8 +629,8 @@
       if (Math.hypot(p.x - d.x, p.y - d.y) < 7) return;
       const g = S.view && S.view.game;
       if (!g || !myTurn(g)) return;
+      if (!S.sel.has(d.id) && !selectPlayable(g, d.id)) { S.ptr = null; return; }
       d.active = true;
-      if (!S.sel.has(d.id)) S.sel.add(d.id);
       buildGhost(g);
       refreshHand();
     }
