@@ -5,7 +5,7 @@
   "description": "セルフホスト式のオンライン大富豪（AI対戦あり）",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js --open"
+    "start": "node server/server.js"
   },
   "engines": {
     "node": ">=16"
