@@ -7,7 +7,7 @@
 
   const S = {
     scale: 1, code: null, token: null, es: null, view: null, screen: null, offset: 0,
-    sel: new Set(), csel: new Set(), picks: [], dlgKey: null, choiceKey: null,
+    sel: new Set(), groups: [], csel: new Set(), picks: [], dlgKey: null, choiceKey: null,
     ptr: null, handPos: {}, fieldEls: new Map(), handEls: new Map(), oppPos: {},
     banners: [], bannerTimer: null
   };
@@ -477,6 +477,19 @@
       if (sc > bs) { bs = sc; best = keep; }
     }
     S.sel = new Set(best.concat([id]));
+    // 他に選びようがないカードは同時に選択する（例：ジョーカーなしで2枚出しのペア）
+    const cur = Array.from(S.sel);
+    const done = moves.some(m => m.size === cur.length && cur.every(x => m.has(x)));
+    if (!done) {
+      const cands = moves.filter(m => cur.every(x => m.has(x)));
+      if (cands.length) {
+        const forced = Array.from(cands[0]).filter(x => !S.sel.has(x) && cands.every(m => m.has(x)));
+        if (forced.length) {
+          forced.forEach(x => S.sel.add(x));
+          S.groups.push(new Set([id].concat(forced)));
+        }
+      }
+    }
     return true;
   }
 
@@ -492,6 +505,7 @@
     const moves = turnMoves(g);
     if (moves && S.sel.size && !fitsMove(moves, Array.from(S.sel))) S.sel.clear();
     const selArr = Array.from(S.sel);
+    S.groups = S.groups.filter(gr => Array.from(gr).every(x => S.sel.has(x)));
     S.handPos = {};
     hand.forEach((c, i) => {
       let el = S.handEls.get(c.id);
@@ -582,8 +596,12 @@
         S.csel.add(id);
       }
     } else {
-      if (S.sel.has(id)) S.sel.delete(id);
-      else if (!selectPlayable(g, id)) return;
+      if (S.sel.has(id)) {
+        // 同時に選択されたカードはまとめて解除
+        const gr = S.groups.find(x => x.has(id));
+        if (gr) { gr.forEach(x => S.sel.delete(x)); S.groups = S.groups.filter(x => x !== gr); }
+        else S.sel.delete(id);
+      } else if (!selectPlayable(g, id)) return;
     }
     refreshHand();
   }
