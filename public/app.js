@@ -851,6 +851,58 @@
     return d;
   }
 
+  // 受け取ったカード（カード交換・7渡し）を画面中央に一度大きく見せてから手札の位置へ飛ばす
+  const RECV_HOLD = 1000, RECV_FLY = 520, RECV_GAP = 92, RECV_CARD_TOP = 252;
+  function showReceived(g, e) {
+    const cards = e.cards;
+    const handScale = 66 / 74; // .card.lg → 手札の .card
+    cards.forEach(c => { const h = S.handEls.get(c.id); if (h) h.classList.add('incoming'); });
+
+    const cardsW = 74 + RECV_GAP * (cards.length - 1);
+    const panelW = Math.max(300, cardsW + 60);
+    const panel = document.createElement('div');
+    panel.className = 'recv-panel';
+    panel.style.left = (640 - panelW / 2) + 'px';
+    panel.style.width = panelW + 'px';
+    panel.innerHTML = '<span class="recv-label">' + esc(nameOf(g, e.from)) + ' から受け取り</span>';
+    $('#fx').appendChild(panel);
+
+    const startX = 640 - cardsW / 2;
+    const flyEls = cards.map((c, i) => {
+      const el = cardEl(c, 'lg recv-card');
+      el.style.left = (startX + i * RECV_GAP) + 'px';
+      el.style.top = RECV_CARD_TOP + 'px';
+      el.style.animationDelay = (i * 80) + 'ms';
+      $('#fx').appendChild(el);
+      return el;
+    });
+
+    setTimeout(() => {
+      panel.classList.add('leave');
+      flyEls.forEach((el, i) => {
+        const c = cards[i];
+        const to = S.handPos[c.id]; // 表示中に手札が並び替わっても最新の位置へ飛ぶ
+        const fromX = startX + i * RECV_GAP;
+        el.classList.add('fly');
+        void el.offsetWidth;
+        if (to) {
+          el.style.transform = 'translate(' + (to.x - fromX) + 'px,' + (to.y - RECV_CARD_TOP) + 'px) scale(' + handScale + ')';
+          el.style.transformOrigin = '0 0';
+        } else {
+          el.style.opacity = '0';
+        }
+      });
+      setTimeout(() => {
+        panel.remove();
+        flyEls.forEach(el => el.remove());
+        cards.forEach(c => {
+          const h = S.handEls.get(c.id);
+          if (h) h.classList.remove('incoming');
+        });
+      }, RECV_FLY);
+    }, RECV_HOLD + cards.length * 80);
+  }
+
   function processEvents(g, prevG, oldPos) {
     const evs = g.events || [];
     for (const e of evs) {
@@ -878,6 +930,8 @@
           const from = e.seat === g.mySeat && oldPos[c.id] ? oldPos[c.id] : seatPoint(g, e.seat, i);
           flyEl(cardEl(c, e.seat === g.mySeat ? '' : 'sm'), from, PILE_PT, 200, { pop: e.seat !== g.mySeat });
         });
+      } else if ((e.t === 'give' || e.t === 'exchange') && e.to === g.mySeat && e.cards) {
+        showReceived(g, e);
       } else if (e.t === 'give' || e.t === 'exchange') {
         const n = e.cards ? e.cards.length : e.count;
         for (let i = 0; i < n; i++) {

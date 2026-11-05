@@ -229,7 +229,15 @@ button, input, select { font-family: inherit; }
 }
 #fx .fly.pop { animation: popUp 0.3s steps(4) backwards; }
 #fx .back.fly { position: absolute; }
-
+#fx .recv-panel {
+  position: absolute; top: 204px; height: 172px;
+  background: var(--ink); border-top: 4px solid var(--accent); border-bottom: 4px solid var(--accent);
+  display: flex; justify-content: center; animation: bannerIn 0.2s steps(4) both;
+}
+#fx .recv-panel.leave { animation: fadeOut 0.3s steps(3) forwards; }
+.recv-label { margin-top: 10px; font-size: 20px; color: var(--accent); letter-spacing: 0.08em; }
+#fx .recv-card { position: absolute; animation: pileIn 0.25s steps(4) backwards; }
+#hand .card.incoming { visibility: hidden; }
 #ghost { position: absolute; display: none; transform: translate(-50%, -50%); pointer-events: none; z-index: 9; }
 #ghost.on { display: flex; }
 #ghost .card { border-color: var(--accent); transform-origin: 50% 120%; }
