@@ -235,6 +235,8 @@ button, input, select { font-family: inherit; }
   display: flex; justify-content: center; animation: bannerIn 0.2s steps(4) both;
 }
 #fx .recv-panel.leave { animation: fadeOut 0.3s steps(3) forwards; }
+#fx .recv-panel.sent { border-color: var(--back-in); }
+#fx .recv-panel.sent .recv-label { color: var(--back-in); }
 .recv-label { margin-top: 10px; font-size: 20px; color: var(--accent); letter-spacing: 0.08em; }
 #fx .recv-card { position: absolute; animation: pileIn 0.25s steps(4) backwards; }
 #hand .card.incoming { visibility: hidden; }
