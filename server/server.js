@@ -309,9 +309,16 @@ function afterChange(room) {
   broadcast(room, evs);
 }
 
+// 人間が全員上がって残りがAIだけか
+function onlyAILeft(room, g) {
+  return g.players.every((p, i) => p.out || room.seatMap[i].kind === 'ai');
+}
+
 function schedule(room, animDelay) {
   const g = room.game;
   if (!g || g.phase === 'end') return;
+  const fast = onlyAILeft(room, g);
+  if (fast) animDelay *= 0.35;
   const aw = E.awaiting(g);
   const keys = new Set();
   for (const a of aw) {
@@ -320,7 +327,8 @@ function schedule(room, animDelay) {
     if (room.timers.has(key)) continue;
     const ctrl = controllerOf(room, a.seat);
     if (ctrl.ai) {
-      const think = a.kind === 'turn' ? 380 + Math.random() * 420 : 450 + Math.random() * 300;
+      const think = fast ? 60 + Math.random() * 80
+        : a.kind === 'turn' ? 380 + Math.random() * 420 : 450 + Math.random() * 300;
       room.timers.set(key, setTimeout(() => runAI(room, a.seat, key, ctrl.level), animDelay + think));
     } else if (room.settings.timer.enabled) {
       const total = room.settings.timer.seconds * 1000;

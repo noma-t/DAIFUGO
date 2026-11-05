@@ -742,7 +742,7 @@
     const dlg = $('#dialog');
     const mine = g.phase === 'choice' && g.pending && g.pending.type === 'bomber' && g.pending.seat === g.mySeat;
     if (!mine) {
-      dlg.classList.remove('on');
+      dlg.classList.remove('on', 'still');
       dlg.innerHTML = '';
       S.dlgKey = null;
       return;
@@ -769,6 +769,7 @@
     }).join('');
     const k = S.picks.length;
     const okBtn = R.bomberMustFull ? k === max : true;
+    dlg.classList.toggle('still', dlg.classList.contains('on')); // 再描画時は表示アニメーションを出さない
     dlg.innerHTML = '<div class="dlg-shade"></div><div class="dlg" role="dialog" aria-label="クイーンボンバー">' +
       '<div class="dlg-head"><span class="dlg-title">クイーンボンバー</span><span class="muted" id="dlgTime"></span></div>' +
       '<div class="dlg-mid"><div class="mini-row">' + qs.map(c => cardHtml(c, 'sm')).join('') + '</div>' +
