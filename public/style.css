@@ -133,6 +133,7 @@ button, input, select { font-family: inherit; }
   position: absolute; left: 40px; top: 72px; width: 1200px; height: 420px;
   background: var(--felt); border: 4px solid var(--ink); box-shadow: inset 0 0 0 6px var(--felt-in);
 }
+#felt.myturn { outline: 4px solid var(--accent); }
 #felt.over { border-color: var(--accent); box-shadow: inset 0 0 0 6px #2f7a5a; }
 #felt.bad { animation: shake 0.3s steps(4); }
 

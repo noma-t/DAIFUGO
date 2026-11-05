@@ -400,6 +400,7 @@
         '<span class="opp-act ' + (blink ? 'blink' : '') + '">' + esc(p.out ? '' : stText) + '</span></div>';
     }).join('');
 
+    $('#felt').classList.toggle('myturn', myTurn(g));
     renderField(g);
     renderPile(g);
 
