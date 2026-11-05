@@ -49,20 +49,29 @@ function lanUrls() {
 }
 
 // ---------------------------------------------------------------- ルーム
-function createRoom(hostName) {
+// 前回の対戦設定（クライアントの Cookie 由来）から席構成を復元する
+function presetSeats(list, hostId) {
+  const def = [{ kind: 'human', pid: hostId }, { kind: 'ai', level: 3 }, { kind: 'ai', level: 3 }, { kind: 'ai', level: 3 }];
+  if (!Array.isArray(list) || list.length < 3 || list.length > 5) return def;
+  if (list.filter(x => x && x.kind === 'me').length !== 1) return def;
+  return list.map(x => {
+    if (x && x.kind === 'me') return { kind: 'human', pid: hostId };
+    if (x && x.kind === 'open') return { kind: 'open' };
+    const lv = parseInt(x && x.level, 10);
+    return { kind: 'ai', level: lv >= 1 && lv <= 5 ? lv : 3 };
+  });
+}
+
+function createRoom(hostName, preset) {
+  preset = preset && typeof preset === 'object' ? preset : {};
   const code = newCode();
   const host = { id: rid(6), token: rid(16), name: cleanName(hostName), connected: false, streams: new Set(), dcTimer: null, leftTimer: null };
   const room = {
     code,
     hostId: host.id,
     members: new Map([[host.id, host]]),
-    seats: [
-      { kind: 'human', pid: host.id },
-      { kind: 'ai', level: 3 },
-      { kind: 'ai', level: 3 },
-      { kind: 'ai', level: 3 }
-    ],
-    settings: E.defaultSettings(),
+    seats: presetSeats(preset.seats, host.id),
+    settings: preset.settings ? E.sanitizeSettings(preset.settings) : E.defaultSettings(),
     screen: 'lobby',
     game: null,
     seatMap: null,
@@ -550,7 +559,7 @@ async function handleApi(req, res, url) {
   try { body = await readBody(req); } catch (e) { return json(res, 400, { error: '不正なリクエストです' }); }
 
   if (p === '/api/create') {
-    const { room, member } = createRoom(body.name);
+    const { room, member } = createRoom(body.name, body.preset);
     return json(res, 200, { code: room.code, token: member.token });
   }
   if (p === '/api/join') {

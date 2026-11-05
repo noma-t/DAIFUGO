@@ -104,9 +104,24 @@
     try { localStorage.setItem('daifugo:name', n); } catch (e) { /* */ }
     return n;
   }
+  // 前回の対戦設定（ルール・持ち時間・席構成）を Cookie に保存／復元する
+  const PRESET_COOKIE = 'daifugo_preset';
+  function loadPreset() {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + PRESET_COOKIE + '=([^;]*)'));
+    if (!m) return null;
+    try { return JSON.parse(decodeURIComponent(m[1])); } catch (e) { return null; }
+  }
+  function savePreset(L) {
+    const preset = {
+      settings: L.settings,
+      seats: L.seats.map(s => s.isMe ? { kind: 'me' } : s.kind === 'ai' ? { kind: 'ai', level: s.level } : { kind: 'open' })
+    };
+    document.cookie = PRESET_COOKIE + '=' + encodeURIComponent(JSON.stringify(preset)) + '; path=/; max-age=31536000; SameSite=Lax';
+  }
+
   $('#btnCreate').addEventListener('click', async () => {
     try {
-      const r = await api('/api/create', { name: myName() });
+      const r = await api('/api/create', { name: myName(), preset: loadPreset() });
       connect(r.code, r.token);
     } catch (e) { $('#titleMsg').textContent = e.message; }
   });
@@ -166,6 +181,7 @@
     const L = v.lobby;
     const host = v.me.isHost;
     const dis = host ? '' : ' disabled';
+    if (host) savePreset(L);
     $('#lbCode').textContent = 'ROOM ' + v.code;
     const humans = L.seats.filter(s => s.kind === 'human').length;
     const ais = L.seats.filter(s => s.kind === 'ai').length;
