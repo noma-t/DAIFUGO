@@ -620,11 +620,14 @@ async function handleApi(req, res, url) {
     const g = room.game;
     if (a.type === 'leave') {
       removeMember(room, m);
+      for (const st of m.streams) { try { st.end(); } catch (e) { /* */ } }
       if (!rooms.has(room.code)) return json(res, 200, { ok: true });
       const seat = room.seatMap.findIndex(s => s.kind === 'human' && s.pid === m.id);
       if (seat >= 0) {
         room.seatMap[seat] = { kind: 'ai', level: 3, name: room.seatMap[seat].name };
         rescheduleSeat(room, seat);
+      } else {
+        broadcast(room, []);
       }
       return json(res, 200, { ok: true });
     }

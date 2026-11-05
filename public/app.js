@@ -292,6 +292,10 @@
   $('#lbLeave').addEventListener('click', () => {
     send({ type: 'leave' }).catch(() => {}).finally(() => leaveToTitle(''));
   });
+  $('#gLeave').addEventListener('click', () => {
+    if (!confirm('ゲームから退出しますか？\nあなたの席は以降AIが引き継ぎます。')) return;
+    send({ type: 'leave' }).catch(() => {}).finally(() => leaveToTitle(''));
+  });
 
   // ---------------------------------------------------------------- カード描画
   function cardCls(c) { return c.r === 16 ? 'jk' : (c.s === 'H' || c.s === 'D') ? 'red' : ''; }

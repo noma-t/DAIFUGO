@@ -68,6 +68,7 @@ button, input, select { font-family: inherit; }
 .badge.on-bind { background: var(--red); color: #fff; }
 .badge.on-rev { background: var(--joker); color: #fff; }
 .badge.on-back { background: #2f8f6f; color: #fff; }
+.tb-right { display: flex; align-items: center; gap: 16px; }
 .turn-info { font-size: 18px; min-width: 200px; text-align: right; }
 .turn-info .sec { color: var(--accent); }
 
