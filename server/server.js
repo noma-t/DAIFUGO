@@ -258,7 +258,7 @@ function calcDelay(evs) {
     if (e.t === 'play') d += 550;
     else if (e.t === 'effect') d += 650;
     else if (e.t === 'flow') d += 450;
-    else if (e.t === 'bomber') d += 1300;
+    else if (e.t === 'bomber') d += 2400;
     else if (e.t === 'give' || e.t === 'discard') d += 500;
     else if (e.t === 'exchange') d += 400;
     else if (e.t === 'pass') d += 250;
