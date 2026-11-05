@@ -52,7 +52,7 @@ function lanUrls() {
 // 前回の対戦設定（クライアントの Cookie 由来）から席構成を復元する
 function presetSeats(list, hostId) {
   const def = [{ kind: 'human', pid: hostId }, { kind: 'ai', level: 3 }, { kind: 'ai', level: 3 }, { kind: 'ai', level: 3 }];
-  if (!Array.isArray(list) || list.length < 3 || list.length > 5) return def;
+  if (!Array.isArray(list) || list.length < 3 || list.length > 8) return def;
   if (list.filter(x => x && x.kind === 'me').length !== 1) return def;
   return list.map(x => {
     if (x && x.kind === 'me') return { kind: 'human', pid: hostId };
@@ -458,7 +458,7 @@ function handleLobbyAction(room, m, a) {
   if (!isHost) return { error: 'ホストのみ変更できます' };
   if (a.type === 'seatCount') {
     const n = parseInt(a.count, 10);
-    if (!(n >= 3 && n <= 5)) return { error: '人数は3〜5人です' };
+    if (!(n >= 3 && n <= 8)) return { error: '人数は3〜8人です' };
     while (room.seats.length < n) room.seats.push({ kind: 'ai', level: 3 });
     while (room.seats.length > n) {
       let i = -1;
@@ -496,7 +496,7 @@ function handleLobbyAction(room, m, a) {
   }
   if (a.type === 'start') {
     if (room.seats.some(s => s.kind === 'open')) return { error: '空いている席があります。AIを入れるか参加を待ってください' };
-    if (room.seats.length < 3 || room.seats.length > 5) return { error: '人数は3〜5人です' };
+    if (room.seats.length < 3 || room.seats.length > 8) return { error: '人数は3〜8人です' };
     startGame(room, false);
     return { ok: true, started: true };
   }

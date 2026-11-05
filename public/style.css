@@ -92,6 +92,8 @@ button, input, select { font-family: inherit; }
 .stepper { display: flex; align-items: center; gap: 8px; font-size: 20px; color: var(--text); }
 #seatList { display: flex; flex-direction: column; gap: 10px; }
 .seat { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 10px; background: var(--bg); border: 3px solid var(--ink); }
+#seatList.dense { gap: 5px; }
+#seatList.dense .seat { min-height: 38px; padding: 2px 10px; }
 .seat-no { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: var(--ink); color: var(--accent); font-size: 15px; flex: none; }
 .seat-name { flex: 1; font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seat-tag { font-size: 13px; padding: 1px 6px; border: 2px solid var(--accent); color: var(--accent); margin-left: 6px; }
@@ -140,6 +142,7 @@ button, input, select { font-family: inherit; }
 .opp { position: absolute; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
 .opp-head { display: flex; align-items: center; gap: 8px; font-size: 16px; white-space: nowrap; }
 .opp-tag { padding: 2px 8px; background: var(--bar); border: 3px solid var(--ink); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+#opps.dense .opp-tag { max-width: 120px; }
 .opp-tag.turn { border-color: var(--accent); }
 .opp-ttl { font-size: 13px; color: var(--muted); }
 .opp-ttl.gold { color: var(--accent); }

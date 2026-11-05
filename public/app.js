@@ -19,7 +19,11 @@
     1: [[545, 120]],
     2: [[330, 136], [760, 136]],
     3: [[70, 200], [545, 120], [1030, 200]],
-    4: [[70, 200], [330, 136], [760, 136], [1030, 200]]
+    4: [[70, 200], [330, 136], [760, 136], [1030, 200]],
+    5: [[70, 230], [300, 120], [545, 100], [790, 120], [1030, 230]],
+    6: [[70, 240], [150, 105], [420, 96], [670, 96], [930, 105], [1030, 240]],
+    7: [[70, 240], [110, 105], [340, 96], [545, 96], [750, 96], [970, 105], [1030, 240]],
+    8: [[70, 240], [110, 105], [340, 96], [545, 96], [750, 96], [970, 105], [1030, 240], [545, 400]]
   };
   const PLAY_OFFS = [[0, 0, 0], [16, -10, 5], [-14, 8, -6], [10, 12, 3], [-12, -8, -4], [6, 6, 7]];
 
@@ -189,8 +193,9 @@
     $('#lbHostNote').textContent = host ? 'あなたがホストです' : 'ルールと席はホストが決めます';
     $('#seatNum').textContent = L.seats.length;
     $('#seatMinus').disabled = !host || L.seats.length <= 3;
-    $('#seatPlus').disabled = !host || L.seats.length >= 5;
+    $('#seatPlus').disabled = !host || L.seats.length >= 8;
 
+    $('#seatList').classList.toggle('dense', L.seats.length >= 6);
     $('#seatList').innerHTML = L.seats.map((s, i) => {
       let body;
       if (s.kind === 'human') {
@@ -383,6 +388,7 @@
     const seats = oppSeats(g);
     const lay = OPP_LAYOUT[seats.length] || OPP_LAYOUT[4];
     S.oppPos = {};
+    $('#opps').classList.toggle('dense', seats.length >= 6);
     $('#opps').innerHTML = seats.map((s, j) => {
       const p = g.players[s];
       const pos = lay[j];
