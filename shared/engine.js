@@ -620,6 +620,11 @@
     if (post.flow) return doFlow(st, leaderFrom(st, seat));
     const others = activeSeats(st).filter(s => s !== seat && !st.players[s].passed);
     if (others.length === 0) return doFlow(st, leaderFrom(st, seat));
+    // 5飛びで残りの全員が飛ばされた（誰も出さずに出した本人へ戻る）なら場を流す
+    if (post.skip >= others.length) {
+      for (let s = nextSeat(st, seat, true), i = 0; i < others.length; i++, s = nextSeat(st, s, true)) ev(st, { t: 'skip', seat: s });
+      return doFlow(st, leaderFrom(st, seat));
+    }
     let t = nextSeat(st, seat, true);
     for (let i = 0; i < post.skip; i++) {
       ev(st, { t: 'skip', seat: t });
