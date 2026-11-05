@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大富豪</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&amp;display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="stage">
+
+  <!-- タイトル -->
+  <section id="scr-title" class="screen">
+    <div class="title-wrap">
+      <h1 class="logo">大富豪</h1>
+      <p class="logo-sub">身内でサクッと遊べる、セルフホスト大富豪</p>
+      <div class="panel title-panel">
+        <label class="field-label" for="inName">なまえ</label>
+        <input id="inName" class="text-in" maxlength="12" autocomplete="off" placeholder="プレイヤー">
+        <div class="title-actions">
+          <div class="title-col">
+            <span class="col-head">ルームを作る</span>
+            <button id="btnCreate" class="btn primary big">ルームを作る</button>
+          </div>
+          <div class="title-sep"></div>
+          <div class="title-col">
+            <label class="col-head" for="inCode">ルームコードで参加</label>
+            <div class="join-row">
+              <input id="inCode" class="text-in code-in" maxlength="4" autocomplete="off" placeholder="ABCD">
+              <button id="btnJoin" class="btn big">参加する</button>
+            </div>
+          </div>
+        </div>
+        <p id="titleMsg" class="msg" role="alert"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ルームトップ -->
+  <section id="scr-lobby" class="screen">
+    <div class="topbar">
+      <div class="tb-left"><span class="room-code" id="lbCode"></span><span class="muted" id="lbCount"></span></div>
+      <div class="tb-mid muted" id="lbHostNote"></div>
+      <button id="lbLeave" class="btn small">退出</button>
+    </div>
+    <div class="panel lb-seats">
+      <div class="panel-head">
+        <span>メンバー</span>
+        <div class="stepper" id="seatStepper">
+          <button class="btn tiny" id="seatMinus" aria-label="席を減らす">−</button>
+          <span id="seatNum">4</span><span class="muted">人</span>
+          <button class="btn tiny" id="seatPlus" aria-label="席を増やす">＋</button>
+        </div>
+      </div>
+      <div id="seatList"></div>
+      <div class="invite">
+        <span class="muted">招待：ルームコードを伝えるか、下のURLを共有</span>
+        <div id="inviteList"></div>
+      </div>
+    </div>
+    <div class="panel lb-rules">
+      <div class="panel-head"><span>ルール</span><span class="muted small-note" id="rulesNote"></span></div>
+      <div id="timerBox"></div>
+      <div id="ruleList"></div>
+    </div>
+    <div class="lb-foot">
+      <span id="lbMsg" class="msg" role="alert"></span>
+      <button id="btnStart" class="btn primary big">ゲーム開始</button>
+    </div>
+  </section>
+
+  <!-- プレイ画面 -->
+  <section id="scr-game" class="screen">
+    <div class="topbar">
+      <div class="tb-left"><span class="room-code" id="gCode"></span><span class="muted" id="gCount"></span></div>
+      <div class="badges">
+        <span id="bBind" class="badge">縛り</span>
+        <span id="bRev" class="badge">革命</span>
+        <span id="bBack" class="badge">11バック</span>
+      </div>
+      <div id="turnInfo" class="turn-info"></div>
+    </div>
+    <div id="felt"></div>
+    <div id="opps"></div>
+    <div id="pile"><div id="pileCards"></div><span class="pile-label">捨て札</span></div>
+    <div id="field"></div>
+    <div id="banner" aria-live="polite"></div>
+    <div id="timer"><div id="timerFill"></div></div>
+    <div id="hand"></div>
+    <div id="mePanel">
+      <span id="meInfo"></span>
+      <button id="btnPlay" class="btn primary act-btn">出す</button>
+      <button id="btnPass" class="btn act-btn">パス</button>
+    </div>
+    <div id="choicePanel"></div>
+    <div id="dialog"></div>
+    <div id="fx"></div>
+    <div id="ghost"></div>
+    <div id="connNote"></div>
+  </section>
+
+  <!-- リザルト -->
+  <section id="scr-result" class="screen">
+    <div class="result-wrap">
+      <h2 class="result-title">リザルト</h2>
+      <div id="resultRows"></div>
+      <div class="result-foot" id="resultFoot"></div>
+    </div>
+  </section>
+
+  <div id="toast" role="status"></div>
+</div>
+<script src="/engine.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
