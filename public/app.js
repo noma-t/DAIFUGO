@@ -465,7 +465,8 @@
 
   function handLayout(n) {
     const step = n > 1 ? Math.min(72, (HAND_W - 66) / (n - 1)) : 0;
-    return i => i * step;
+    const off = n ? Math.round((HAND_W - (66 + step * (n - 1))) / 2) : 0;
+    return i => off + i * step;
   }
 
   // 自分の番に出せる手（ビューごとにキャッシュ）
@@ -542,7 +543,8 @@
       el.classList.toggle('ghosted', !!(dragging && on && !cm));
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
       let playable = true, hint = false, dim = false;
-      if (moves) {
+      if (!moves && !cm && g.mySeat >= 0) dim = true; // 自分の番でないときは全カードを暗転
+      else if (moves) {
         playable = moves.some(m => m.has(c.id));
         if (!playable) dim = true;
         else if (!on && selArr.length) {
