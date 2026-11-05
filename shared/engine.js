@@ -638,8 +638,10 @@
     ev(st, { t: 'pass', seat: seat });
     const lp = st.lastPlayer;
     const remaining = activeSeats(st).filter(s => !st.players[s].passed && s !== lp);
-    if (remaining.length === 0) return doFlow(st, leaderFrom(st, lp));
-    st.turn = nextSeat(st, seat, true);
+    const next = nextSeat(st, seat, true);
+    // 5飛びで飛ばされた人は passed にならないため、手番が最後に出した人へ戻った時点でも場を流す
+    if (remaining.length === 0 || next === lp) return doFlow(st, leaderFrom(st, lp));
+    st.turn = next;
   }
 
   function doFlow(st, leader) {
