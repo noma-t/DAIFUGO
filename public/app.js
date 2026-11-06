@@ -501,7 +501,7 @@
     if (!moves || moves.length) return;
     S.autoPassSent = true;
     S.sel.clear();
-    toast('出せるカードがないので自動パスしました');
+    toast('自動パス');
     send({ type: 'pass' }).catch(() => {});
   }
 
