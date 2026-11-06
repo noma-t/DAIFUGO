@@ -116,6 +116,7 @@ function removeMember(room, m) {
   if (room.hostId === m.id) {
     const next = room.members.values().next().value;
     room.hostId = next ? next.id : null;
+    ensureHost(room);
   }
   if (!room.members.size) destroyRoom(room);
 }
@@ -149,7 +150,7 @@ function viewFor(room, m, evs) {
   const v = {
     now: Date.now(),
     code: room.code,
-    lan: lanUrls(),
+    lan: room.screen === 'lobby' ? lanUrls() : [],
     screen: room.screen,
     me: { id: m.id, name: m.name, isHost: room.hostId === m.id },
     lobby: {
@@ -395,17 +396,19 @@ function onTimeout(room, seat, key) {
   const aw = E.awaiting(g).find(a => a.seat === seat);
   if (!aw) return;
   let action = null;
-  if (room.settings.timer.onTimeout === 'ai') {
-    action = AI.decide(g, seat, 3);
-  } else if (aw.kind === 'turn') {
-    action = g.fieldCombo ? { type: 'pass' } : AI.decide(g, seat, 2);
-  } else if (aw.kind === 'bomber') {
-    action = g.rules.bomberMustFull ? AI.decide(g, seat, 2) : { type: 'declare', ranks: [] };
-  } else if (aw.kind === 'exchange') {
-    action = AI.decideChoice(g, seat, 'exchange', 2);
-  } else {
-    action = { type: 'choose', cards: [] };
-  }
+  try {
+    if (room.settings.timer.onTimeout === 'ai') {
+      action = AI.decide(g, seat, 3);
+    } else if (aw.kind === 'turn') {
+      action = g.fieldCombo ? { type: 'pass' } : AI.decide(g, seat, 2);
+    } else if (aw.kind === 'bomber') {
+      action = g.rules.bomberMustFull ? AI.decide(g, seat, 2) : { type: 'declare', ranks: [] };
+    } else if (aw.kind === 'exchange') {
+      action = AI.decideChoice(g, seat, 'exchange', 2);
+    } else {
+      action = { type: 'choose', cards: [] };
+    }
+  } catch (e) { console.error(e); action = null; }
   applyAction(room, seat, action);
   afterChange(room);
 }
@@ -459,11 +462,11 @@ function handleLobbyAction(room, m, a) {
   if (a.type === 'seatCount') {
     const n = parseInt(a.count, 10);
     if (!(n >= 3 && n <= 8)) return { error: '人数は3〜8人です' };
+    if (n < room.seats.length && room.seats.filter(s => s.kind !== 'human').length < room.seats.length - n) return { error: '人間の席は減らせません' };
     while (room.seats.length < n) room.seats.push({ kind: 'ai', level: 3 });
     while (room.seats.length > n) {
       let i = -1;
       for (let j = room.seats.length - 1; j >= 0; j--) if (room.seats[j].kind !== 'human') { i = j; break; }
-      if (i < 0) return { error: '人間の席は減らせません' };
       room.seats.splice(i, 1);
     }
     return { ok: true };
@@ -654,13 +657,14 @@ const TYPES = {
 };
 
 function serveStatic(req, res, url) {
-  let p = decodeURIComponent(url.pathname);
+  let p;
+  try { p = decodeURIComponent(url.pathname); } catch (e) { res.writeHead(400); return res.end(); }
   let file;
   if (p === '/engine.js') file = path.join(ROOT, 'shared', 'engine.js');
   else {
     if (p === '/') p = '/index.html';
     file = path.normalize(path.join(PUBLIC, p));
-    if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
+    if (!file.startsWith(PUBLIC + path.sep)) { res.writeHead(403); return res.end(); }
   }
   fs.readFile(file, (e, data) => {
     if (e) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
@@ -670,7 +674,8 @@ function serveStatic(req, res, url) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://localhost');
+  let url;
+  try { url = new URL(req.url, 'http://localhost'); } catch (e) { res.writeHead(400); return res.end(); }
   if (url.pathname.startsWith('/api/')) {
     handleApi(req, res, url).catch(e => { console.error(e); try { json(res, 500, { error: 'サーバーエラー' }); } catch (x) { /* */ } });
     return;
