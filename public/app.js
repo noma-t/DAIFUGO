@@ -201,6 +201,7 @@
     { k: 'fiveSkip', name: '5飛び', desc: '5を出すと次のプレイヤーを飛ばす' },
     { k: 'sevenPass', name: '7渡し', desc: '7を出すと手札を次のプレイヤーに渡せる' },
     { k: 'tenDiscard', name: '10捨て', desc: '10を出すと手札を捨てられる' },
+    { k: 'passPersist', name: 'パス継続', desc: 'パスしたら場が流れるまで出せない（オフならパスはその手番だけ）' },
     { k: 'jokers', name: 'ジョーカーの枚数', type: 'jokers' },
     { k: 'finishBan', name: '上がり禁止', desc: '選んだカードを最後に出して上がれない', subs: [{ k: 'banJoker', name: 'JK' }, { k: 'banTwo', name: '2' }, { k: 'banEight', name: '8' }, { k: 'banSpade3', name: '♠3' }] },
     { k: 'queenBomber', name: 'クイーンボンバー', desc: 'Qを出すと数字を宣言し、全員がその数字を捨てる', subs: [{ k: 'bomberMustFull', name: '必ず枚数分宣言' }] },

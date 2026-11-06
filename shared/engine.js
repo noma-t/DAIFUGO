@@ -29,7 +29,8 @@
         fiveSkip: false,      // 5飛び
         sevenPass: false,     // 7渡し
         tenDiscard: false,    // 10捨て
-        jokers: 1,            // ジョーカーの枚数
+        passPersist: false,   // パス継続（パスしたら場が流れるまで出せない）
+        jokers: 1,           // ジョーカーの枚数
         finishBan: true,      // 上がり禁止
         banJoker: true,
         banTwo: true,
@@ -438,6 +439,8 @@
     }
     st.fieldCombo = cb;
     st.lastPlayer = seat;
+    // パス継続がオフなら、パスはその手番だけ。誰かが出したら全員また出せるようになる
+    if (!R.passPersist) st.players.forEach(pl => { pl.passed = false; });
 
     const cnt = r => cb.reps.filter(x => x === r).length;
     let flow = false, skip = 0;
