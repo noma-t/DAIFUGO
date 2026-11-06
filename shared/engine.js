@@ -30,6 +30,7 @@
         sevenPass: false,     // 7渡し
         tenDiscard: false,    // 10捨て
         jokers: 1,            // ジョーカーの枚数
+        jokerEffect: false,   // ジョーカーが代わりになった数字の効果（5飛び・7渡し・8切りなど）も発動させる
         finishBan: true,      // 上がり禁止
         banJoker: true,
         banTwo: true,
@@ -439,7 +440,10 @@
     st.fieldCombo = cb;
     st.lastPlayer = seat;
 
-    const cnt = r => cb.reps.filter(x => x === r).length;
+    // 数字の効果の枚数。jokerEffect がオンならジョーカーが代わりになった数字も数える
+    const cnt = R.jokerEffect
+      ? r => cb.reps.filter(x => x === r).length
+      : r => cards.filter(c => c.r === r).length;
     let flow = false, skip = 0;
     if (prev && prev.jokerSingle) { eff(st, 'スペ3返し', seat); flow = true; }
     if (R.revolution && cb.type === 'multi' && cb.n >= 4) { st.revolution = !st.revolution; eff(st, '革命', seat); }
