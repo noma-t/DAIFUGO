@@ -359,7 +359,8 @@ function buildAck(room, evs) {
   }
   if (g.phase !== 'exchange') room.exLog = [];
   if (!ack) return null;
-  ack.waiting = new Set(ack.targets.filter(s => humanSeatConnected(room, s)));
+  // 既に上がっていて手番が回ってこないプレイヤーには確認画面を出さない
+  ack.waiting = new Set(ack.targets.filter(s => !g.players[s].out && humanSeatConnected(room, s)));
   if (!ack.waiting.size) return null;
   return ack;
 }
