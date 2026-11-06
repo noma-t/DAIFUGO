@@ -276,6 +276,17 @@ button, input, select { font-family: inherit; }
 .dlg-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dlg-foot .note { font-size: 14px; color: var(--muted); }
 
+#ackDialog { position: absolute; inset: 0; z-index: 10; display: none; }
+#ackDialog.on { display: block; }
+.ack-dlg { top: 110px; }
+.ack-chip { display: inline-block; margin-left: 8px; font-size: 20px; }
+.ack-list { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow-y: auto; }
+.ack-sub { font-size: 13px; }
+.ack-row { display: flex; align-items: center; gap: 14px; min-height: 52px; }
+.ack-row.me .ack-name { color: var(--accent); }
+.ack-name { width: 200px; flex: none; font-size: 16px; }
+.ack-cards { flex-wrap: wrap; }
+
 #connNote { position: absolute; right: 16px; bottom: 8px; font-size: 13px; color: #ff8a8f; z-index: 11; }
 
 /* ---------- リザルト ---------- */
