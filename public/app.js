@@ -229,7 +229,6 @@
     $('#seatMinus').disabled = !host || L.seats.length <= 3;
     $('#seatPlus').disabled = !host || L.seats.length >= 8;
 
-    $('#seatList').classList.toggle('dense', L.seats.length >= 6);
     $('#seatList').innerHTML = L.seats.map((s, i) => {
       let body;
       if (s.kind === 'human') {
@@ -246,13 +245,6 @@
       }
       return '<div class="seat"><span class="seat-no">' + (i + 1) + '</span>' + body + '</div>';
     }).join('');
-
-    const urls = [location.origin + '/?room=' + v.code];
-    (v.lan || []).forEach(u => {
-      const x = u.replace(/\/$/, '') + '/?room=' + v.code;
-      if (urls.indexOf(x) < 0) urls.push(x);
-    });
-    $('#inviteList').innerHTML = urls.map(u => '<div class="invite-row"><span class="invite-url">' + esc(u) + '</span><button class="btn small" data-copy="' + esc(u) + '">コピー</button></div>').join('');
 
     const st = L.settings;
     const R = st.rules, T = st.timer;
