@@ -974,8 +974,6 @@
     if (seat === g.mySeat) return 'あなた';
     return g.players[seat] ? g.players[seat].name : '';
   }
-  // 帯を長めに表示するルール（ミリ秒）
-  const BANNER_HOLD = { 'クイーンボンバー': 3000 };
   function queueBanner(rule, player, chips) {
     S.banners.push({ rule, player, chips: chips || [] });
     if (!S.bannerTimer) nextBanner();
@@ -988,7 +986,7 @@
     el.innerHTML = '<div class="bn-row"><span class="bn-rule">' + esc(b.rule) + '</span>' +
       b.chips.map(c => '<span class="bn-chip">' + esc(c) + '</span>').join('') + '</div><span class="bn-player">' + esc(b.player) + '</span>';
     el.classList.add('on');
-    const hold = BANNER_HOLD[b.rule] || (S.banners.length ? 650 : (b.chips.length ? 1700 : 1150));
+    const hold = S.banners.length ? 650 : (b.chips.length ? 1700 : 1150);
     S.bannerTimer = setTimeout(nextBanner, hold);
   }
 
