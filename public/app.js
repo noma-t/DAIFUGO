@@ -403,6 +403,38 @@
     renderChoice(g);
     renderBomber(g);
     processEvents(g, prevG, oldPos);
+    maybeAutoPass(g);
+  }
+
+  // ---------------------------------------------------------------- 自動パス
+  const AUTO_PASS_KEY = 'daifugo:autoPass';
+  try { S.autoPass = localStorage.getItem(AUTO_PASS_KEY) === '1'; } catch (e) { S.autoPass = false; }
+  S.autoPassSent = false;
+
+  function renderAutoPassToggle() {
+    const b = $('#autoPassToggle');
+    b.classList.toggle('on', S.autoPass);
+    b.setAttribute('aria-pressed', S.autoPass ? 'true' : 'false');
+    b.textContent = '自動パス ' + (S.autoPass ? 'ON' : 'OFF');
+  }
+  renderAutoPassToggle();
+  $('#autoPassToggle').addEventListener('click', () => {
+    S.autoPass = !S.autoPass;
+    try { localStorage.setItem(AUTO_PASS_KEY, S.autoPass ? '1' : '0'); } catch (e) { /* */ }
+    renderAutoPassToggle();
+    if (S.view && S.view.game) maybeAutoPass(S.view.game);
+  });
+
+  // 自分の番で場にカードがあり、出せる手が1つもなければ即パスする
+  function maybeAutoPass(g) {
+    if (!myTurn(g)) { S.autoPassSent = false; return; }
+    if (!S.autoPass || S.autoPassSent || !g.ctx.field) return;
+    const moves = turnMoves(g);
+    if (!moves || moves.length) return;
+    S.autoPassSent = true;
+    S.sel.clear();
+    toast('出せるカードがないので自動パスしました');
+    send({ type: 'pass' }).catch(() => {});
   }
 
   function renderField(g) {
