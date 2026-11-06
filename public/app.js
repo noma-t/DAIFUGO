@@ -9,7 +9,7 @@
     scale: 1, code: null, token: null, es: null, view: null, screen: null, offset: 0,
     sel: new Set(), groups: [], csel: new Set(), picks: [], dlgKey: null, choiceKey: null,
     ptr: null, handPos: {}, fieldEls: new Map(), handEls: new Map(), oppPos: {},
-    banners: [], bannerTimer: null
+    banners: [], bannerTimer: null, ackId: null, ackSent: null, ackShowAt: 0, ackTimer: null
   };
 
   const FELT = { x: 40, y: 72, w: 1200, h: 420 };
@@ -368,6 +368,12 @@
     $('#dialog').classList.remove('on');
     $('#dialog').innerHTML = '';
     $('#choicePanel').classList.remove('on');
+    $('#ackDialog').classList.remove('on');
+    $('#ackDialog').innerHTML = '';
+    S.ackId = null;
+    S.ackSent = null;
+    clearTimeout(S.ackTimer);
+    S.ackTimer = null;
     endDrag();
   }
 
@@ -378,9 +384,9 @@
     return r;
   }
 
-  function myTurn(g) { return g.phase === 'play' && g.turn === g.mySeat && g.mySeat >= 0; }
+  function myTurn(g) { return !g.ack && g.phase === 'play' && g.turn === g.mySeat && g.mySeat >= 0; }
   function choiceMode(g) {
-    if (g.mySeat < 0) return null;
+    if (g.mySeat < 0 || g.ack) return null;
     if (g.phase === 'choice' && g.pending && g.pending.seat === g.mySeat && g.pending.type !== 'bomber') {
       return { kind: g.pending.type, max: g.pending.max, to: g.pending.to, exact: false };
     }
@@ -463,6 +469,7 @@
     updateButtons();
     renderChoice(g);
     renderBomber(g);
+    renderAck(g);
     processEvents(g, prevG, oldPos);
     maybeAutoPass(g);
   }
@@ -816,7 +823,7 @@
   // ---------------- クイーンボンバー宣言
   function renderBomber(g) {
     const dlg = $('#dialog');
-    const mine = g.phase === 'choice' && g.pending && g.pending.type === 'bomber' && g.pending.seat === g.mySeat;
+    const mine = !g.ack && g.phase === 'choice' && g.pending && g.pending.type === 'bomber' && g.pending.seat === g.mySeat;
     if (!mine) {
       dlg.classList.remove('on', 'still');
       dlg.innerHTML = '';
@@ -875,6 +882,75 @@
     } else if (b.id === 'bmNone') {
       send({ type: 'declare', ranks: [] }).catch(() => {});
     }
+  });
+
+  // ---------------- 結果確認（クイーンボンバー・カード交換）
+  // OK を押すまで閉じない。全員の OK でサーバーが進行を再開する
+  function renderAck(g) {
+    const box = $('#ackDialog');
+    const ack = g.ack;
+    const show = ack && ack.mine && S.ackSent !== ack.id;
+    if (!show) {
+      clearTimeout(S.ackTimer);
+      S.ackTimer = null;
+      box.classList.remove('on');
+      box.innerHTML = '';
+      if (!ack) { S.ackId = null; S.ackSent = null; }
+      return;
+    }
+    if (S.ackId !== ack.id) {
+      S.ackId = ack.id;
+      // カードが飛ぶ演出を見せてから開く
+      S.ackShowAt = Date.now() + (ack.kind === 'bomber' ? 1500 : 900);
+    }
+    const wait = S.ackShowAt - Date.now();
+    if (wait > 0) {
+      if (!S.ackTimer) S.ackTimer = setTimeout(() => { S.ackTimer = null; if (S.view && S.view.game) renderAck(S.view.game); }, wait);
+      return;
+    }
+    const firstOpen = !box.classList.contains('on');
+    box.innerHTML = ack.kind === 'bomber' ? bomberAckHtml(g, ack) : exchangeAckHtml(g, ack);
+    if (firstOpen) box.classList.add('on');
+  }
+  function ackCards(cards) {
+    return cards && cards.length ? '<div class="mini-row ack-cards">' + cards.map(c => cardHtml(c, 'sm')).join('') + '</div>' : '<span class="muted">なし</span>';
+  }
+  function ackFoot(g, ack) {
+    const others = ack.waiting.length - (ack.mine ? 1 : 0);
+    return '<div class="dlg-foot"><span class="note">' + (others > 0 ? '全員がOKを押すと再開します' : '') + '</span>' +
+      '<div class="cp-btns"><button class="btn primary" id="ackOk">OK</button></div></div>';
+  }
+  function bomberAckHtml(g, ack) {
+    const rows = g.players.map((p, s) => {
+      const L = ack.losses[s] || [];
+      if (p.out && !L.length) return '';
+      return '<div class="ack-row' + (s === g.mySeat ? ' me' : '') + '"><span class="ack-name">' + esc(nameOf(g, s)) + '</span>' + ackCards(L) + '</div>';
+    }).join('');
+    return '<div class="dlg-shade"></div><div class="dlg ack-dlg" role="dialog" aria-label="クイーンボンバーの結果">' +
+      '<div class="dlg-head"><span class="dlg-title">クイーンボンバー</span><span class="muted" id="ackTime"></span></div>' +
+      '<span class="dlg-text">' + esc(nameOf(g, ack.seat)) + ' が宣言：' +
+      ack.ranks.map(r => '<span class="bn-chip ack-chip">' + E.RANK_LABEL[r] + '</span>').join('') + '</span>' +
+      '<div class="ack-list"><span class="muted ack-sub">捨てられたカード</span>' + rows + '</div>' +
+      ackFoot(g, ack) + '</div>';
+  }
+  function exchangeAckHtml(g, ack) {
+    const rows = [];
+    (ack.got || []).forEach(x => rows.push('<div class="ack-row"><span class="ack-name">' + esc(nameOf(g, x.from)) + ' から受け取った</span>' + ackCards(x.cards) + '</div>'));
+    (ack.gave || []).forEach(x => rows.push('<div class="ack-row"><span class="ack-name">' + esc(nameOf(g, x.to)) + ' に渡した</span>' + ackCards(x.cards) + '</div>'));
+    return '<div class="dlg-shade"></div><div class="dlg ack-dlg" role="dialog" aria-label="カード交換の結果">' +
+      '<div class="dlg-head"><span class="dlg-title">カード交換</span><span class="muted" id="ackTime"></span></div>' +
+      '<div class="ack-list">' + rows.join('') + '</div>' +
+      ackFoot(g, ack) + '</div>';
+  }
+  $('#ackDialog').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.id !== 'ackOk') return;
+    const g = S.view && S.view.game;
+    if (!g || !g.ack) return;
+    const id = g.ack.id;
+    S.ackSent = id;
+    renderAck(g);
+    send({ type: 'ack', id }).catch(() => { S.ackSent = null; if (S.view && S.view.game) renderAck(S.view.game); });
   });
 
   // ---------------- 演出
@@ -1054,8 +1130,8 @@
     const v = S.view;
     if (!v || v.screen !== 'game' || !v.game) return;
     const g = v.game;
-    const seat = awaitedSeat(g);
-    const dl = seat >= 0 ? g.deadlines[seat] : null;
+    const seat = g.ack ? (g.ack.mine && S.ackSent !== g.ack.id ? g.mySeat : -1) : awaitedSeat(g);
+    const dl = g.ack ? g.ack.deadline : seat >= 0 ? g.deadlines[seat] : null;
     const fill = $('#timerFill');
     let secTxt = '';
     if (dl) {
@@ -1068,7 +1144,9 @@
     }
     fill.classList.toggle('mine', seat === g.mySeat);
     let info = '';
-    if (g.phase === 'play') {
+    if (g.ack) {
+      info = '結果確認中';
+    } else if (g.phase === 'play') {
       info = g.turn === g.mySeat ? 'あなたの番' : esc(nameOf(g, g.turn)) + 'の番';
     } else if (g.phase === 'choice' && g.pending) {
       info = g.pending.seat === g.mySeat ? 'あなたの番' : esc(nameOf(g, g.pending.seat)) + 'の番';
@@ -1082,6 +1160,8 @@
     if (ti.innerHTML !== html) ti.innerHTML = html;
     const dt = $('#dlgTime');
     if (dt) dt.textContent = secTxt ? '残り ' + secTxt + '秒' : '';
+    const at = $('#ackTime');
+    if (at) at.textContent = secTxt ? '残り ' + secTxt + '秒' : '';
   }
   requestAnimationFrame(tick);
 

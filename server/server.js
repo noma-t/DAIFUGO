@@ -209,6 +209,7 @@ function viewFor(room, m, evs) {
       pending: g.phase === 'choice' ? g.pending : null,
       exPending: g.phase === 'exchange' ? g.exPending : null,
       deadlines,
+      ack: ackViewFor(room, mySeat),
       timer: room.settings.timer,
       events: filterEvents(evs || [], mySeat)
     };
@@ -252,6 +253,7 @@ function startGame(room, again) {
   });
   room.screen = 'game';
   room.result = null;
+  room.exLog = [];
   clearAllTimers(room);
   afterChange(room);
 }
@@ -261,6 +263,7 @@ function clearAllTimers(room) {
   room.timers.clear();
   room.deadlines = {};
   if (room.endTimer) { clearTimeout(room.endTimer); room.endTimer = null; }
+  clearAck(room);
 }
 
 function calcDelay(evs) {
@@ -282,6 +285,18 @@ function afterChange(room) {
   const g = room.game;
   const evs = g.events;
   g.events = [];
+  const ack = buildAck(room, evs);
+  if (ack) {
+    startAck(room, ack, calcDelay(evs));
+    broadcast(room, evs);
+    return;
+  }
+  proceed(room, evs);
+}
+
+// 結果確認待ちの後に続く進行（ゲーム終了処理または次の手番の予約）
+function proceed(room, evs) {
+  const g = room.game;
   if (g.phase === 'end') {
     clearAllTimers(room);
     broadcast(room, evs);
@@ -314,6 +329,105 @@ function afterChange(room) {
 // 人間が全員上がって残りがAIだけか
 function onlyAILeft(room, g) {
   return g.players.every((p, i) => p.out || room.seatMap[i].kind === 'ai');
+}
+
+// ---------------------------------------------------------------- 結果確認（OK待ち）
+// クイーンボンバーとカード交換の結果は、表示対象の人間プレイヤー全員がOKを押すまで進行を止める
+function humanSeatConnected(room, seat) {
+  const ctrl = controllerOf(room, seat);
+  return !ctrl.ai;
+}
+
+function buildAck(room, evs) {
+  const g = room.game;
+  if (!room.exLog) room.exLog = [];
+  for (const e of evs) if (e.t === 'exchange') room.exLog.push(e);
+  const bomber = evs.find(e => e.t === 'bomber');
+  let ack = null;
+  if (bomber) {
+    const targets = [];
+    for (let s = 0; s < g.n; s++) targets.push(s);
+    ack = { kind: 'bomber', seat: bomber.seat, ranks: bomber.ranks.slice().sort((a, b) => a - b), losses: bomber.losses, targets };
+  } else if (g.phase !== 'exchange' && room.exLog.length) {
+    const log = room.exLog;
+    const targets = [];
+    for (const e of log) {
+      if (targets.indexOf(e.from) < 0) targets.push(e.from);
+      if (targets.indexOf(e.to) < 0) targets.push(e.to);
+    }
+    ack = { kind: 'exchange', log, targets };
+  }
+  if (g.phase !== 'exchange') room.exLog = [];
+  if (!ack) return null;
+  ack.waiting = new Set(ack.targets.filter(s => humanSeatConnected(room, s)));
+  if (!ack.waiting.size) return null;
+  return ack;
+}
+
+function startAck(room, ack, animDelay) {
+  // 確認中は手番・AI のタイマーをすべて止める
+  for (const t of room.timers.values()) if (t) clearTimeout(t);
+  room.timers.clear();
+  room.deadlines = {};
+  ack.id = rid(4);
+  room.ack = ack;
+  if (room.settings.timer.enabled) {
+    const total = room.settings.timer.seconds * 1000;
+    ack.deadline = { at: Date.now() + animDelay + total, total };
+    ack.timer = setTimeout(() => { if (room.ack === ack) finishAck(room); }, animDelay + total);
+  }
+}
+
+function clearAck(room) {
+  if (room.ack && room.ack.timer) clearTimeout(room.ack.timer);
+  room.ack = null;
+}
+
+function finishAck(room) {
+  clearAck(room);
+  if (!room.game || room.screen !== 'game') return;
+  proceed(room, []);
+}
+
+function ackSeat(room, seat) {
+  const ack = room.ack;
+  if (!ack) return;
+  ack.waiting.delete(seat);
+  if (!ack.waiting.size) finishAck(room);
+  else broadcast(room, []);
+}
+
+// 接続状態や席の変化で、確認待ちの対象から外れた席を除く
+function refreshAck(room) {
+  const ack = room.ack;
+  if (!ack) return;
+  for (const s of Array.from(ack.waiting)) if (!humanSeatConnected(room, s)) ack.waiting.delete(s);
+  if (!ack.waiting.size) finishAck(room);
+  else broadcast(room, []);
+}
+
+function ackViewFor(room, mySeat) {
+  const ack = room.ack;
+  if (!ack) return null;
+  const g = room.game;
+  const v = {
+    id: ack.id,
+    kind: ack.kind,
+    target: ack.targets.indexOf(mySeat) >= 0,
+    mine: ack.waiting.has(mySeat),
+    waiting: Array.from(ack.waiting).map(s => g.players[s].name),
+    deadline: ack.deadline || null
+  };
+  if (ack.kind === 'bomber') {
+    v.seat = ack.seat;
+    v.ranks = ack.ranks;
+    v.losses = ack.losses;
+  } else if (v.target) {
+    // カード交換は自分が関わった分だけを渡す
+    v.gave = ack.log.filter(e => e.from === mySeat).map(e => ({ to: e.to, cards: e.cards }));
+    v.got = ack.log.filter(e => e.to === mySeat).map(e => ({ from: e.from, cards: e.cards }));
+  }
+  return v;
 }
 
 function schedule(room, animDelay) {
@@ -353,6 +467,7 @@ function schedule(room, animDelay) {
 
 function rescheduleSeat(room, seat) {
   if (!room.game || room.screen !== 'game') return;
+  if (room.ack) { refreshAck(room); return; }
   for (const k of Array.from(room.timers.keys())) {
     const parts = k.split(':');
     if (+parts[1] === seat) {
@@ -381,7 +496,7 @@ function applyAction(room, seat, action) {
 }
 
 function runAI(room, seat, key, level) {
-  if (!keyValid(room, key) || !room.game) return;
+  if (!keyValid(room, key) || !room.game || room.ack) return;
   room.timers.delete(key);
   let action = null;
   try { action = AI.decide(room.game, seat, level); } catch (e) { console.error(e); }
@@ -390,7 +505,7 @@ function runAI(room, seat, key, level) {
 }
 
 function onTimeout(room, seat, key) {
-  if (!keyValid(room, key) || !room.game) return;
+  if (!keyValid(room, key) || !room.game || room.ack) return;
   room.timers.delete(key);
   delete room.deadlines[key];
   const g = room.game;
@@ -655,6 +770,11 @@ async function handleApi(req, res, url) {
     }
     const seat = room.seatMap.findIndex(s => s.kind === 'human' && s.pid === m.id);
     if (seat < 0) return json(res, 400, { error: '席がありません' });
+    if (a.type === 'ack') {
+      if (room.ack && (!a.id || a.id === room.ack.id)) ackSeat(room, seat);
+      return json(res, 200, { ok: true });
+    }
+    if (room.ack) return json(res, 400, { error: '結果の確認待ちです' });
     const r = E.act(g, seat, a);
     if (!r.ok) return json(res, 400, { error: r.error });
     afterChange(room);
