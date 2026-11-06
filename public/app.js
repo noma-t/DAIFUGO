@@ -624,7 +624,7 @@
       const on = cm ? S.csel.has(c.id) : S.sel.has(c.id);
       el.classList.toggle('sel', on && !cm);
       el.classList.toggle('pick', on && !!cm);
-      el.classList.toggle('ghosted', !!(dragging && on && !cm));
+      el.classList.toggle('ghosted', !!(dragging && on));
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
       let playable = true, hint = false, dim = false;
       if (!moves && !cm && g.mySeat >= 0) dim = true; // 自分の番でないときは全カードを暗転
@@ -730,8 +730,17 @@
     if (!d.active) {
       if (Math.hypot(p.x - d.x, p.y - d.y) < 7) return;
       const g = S.view && S.view.game;
-      if (!g || !myTurn(g)) return;
-      if (!S.sel.has(d.id) && !selectPlayable(g, d.id)) { S.ptr = null; return; }
+      const cm = g && choiceMode(g);
+      if (!g || !(cm || myTurn(g))) return;
+      if (cm) {
+        // 7渡し・10捨て・カード交換：ドラッグしたカードを選択に加える
+        if (!S.csel.has(d.id)) {
+          if (S.csel.size >= cm.max) {
+            if (cm.max === 1) S.csel.clear(); else { S.ptr = null; return; }
+          }
+          S.csel.add(d.id);
+        }
+      } else if (!S.sel.has(d.id) && !selectPlayable(g, d.id)) { S.ptr = null; return; }
       d.active = true;
       buildGhost(g);
       refreshHand();
@@ -748,7 +757,7 @@
     if (d.active) {
       const over = d.over;
       endDrag();
-      if (over) tryPlay();
+      if (over) { const g = S.view && S.view.game; if (g && choiceMode(g)) tryChoose(); else tryPlay(); }
       refreshHand();
     } else {
       S.ptr = null;
@@ -762,7 +771,8 @@
     $('#felt').classList.remove('over');
   }
   function buildGhost(g) {
-    const cards = g.hand.filter(c => S.sel.has(c.id));
+    const picked = choiceMode(g) ? S.csel : S.sel;
+    const cards = g.hand.filter(c => picked.has(c.id));
     const n = cards.length;
     const gh = $('#ghost');
     gh.innerHTML = cards.map((c, k) => cardHtml(c, 'lg', 'margin-left:' + (k === 0 ? 0 : -40) + 'px;transform:rotate(' + ((k - (n - 1) / 2) * 9) + 'deg)')).join('');
@@ -807,13 +817,28 @@
     cp.innerHTML = '<span class="cp-title">' + title + '</span><span class="cp-text">' + text + '</span><div class="cp-btns">' + btns + '</div>';
     cp.classList.add('on');
   }
+  // 選択中のカードで確定する（「渡す／捨てる」ボタンとD&Dドロップ共通）
+  function tryChoose() {
+    const g = S.view && S.view.game;
+    const cm = g && choiceMode(g);
+    if (!cm) return false;
+    const k = S.csel.size;
+    const blocked = E.sfbBlocked(g.ctx.rules, cm.kind) && k > 0 && k === g.hand.length;
+    if (cm.kind === 'exchange' ? k !== cm.max : (k === 0 || blocked)) {
+      const f = $('#felt');
+      f.classList.remove('bad'); void f.offsetWidth; f.classList.add('bad');
+      return false;
+    }
+    const ids = Array.from(S.csel);
+    S.csel.clear();
+    send({ type: 'choose', cards: ids }).catch(() => {});
+    return true;
+  }
   $('#choicePanel').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
     if (b.id === 'cpOk') {
-      const ids = Array.from(S.csel);
-      S.csel.clear();
-      send({ type: 'choose', cards: ids }).catch(() => {});
+      tryChoose();
     } else if (b.id === 'cpNone') {
       S.csel.clear();
       send({ type: 'choose', cards: [] }).catch(() => {});
