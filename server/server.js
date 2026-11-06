@@ -81,6 +81,7 @@ function createRoom(hostName, preset) {
     deadlines: {},
     result: null,
     lastActive: Date.now(),
+    createdAt: Date.now(),
     endTimer: null
   };
   rooms.set(code, room);
@@ -509,6 +510,24 @@ function handleLobbyAction(room, m, a) {
 async function handleApi(req, res, url) {
   const p = url.pathname;
   if (p === '/api/info' && req.method === 'GET') return json(res, 200, { lan: lanUrls(), port: PORT });
+
+  if (p === '/api/rooms' && req.method === 'GET') {
+    const list = Array.from(rooms.values())
+      .filter(room => Array.from(room.members.values()).some(m => m.connected))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(room => {
+        const host = room.members.get(room.hostId);
+        return {
+          code: room.code,
+          hostName: host ? host.name : '?',
+          screen: room.screen,
+          humans: room.seats.filter(s => s.kind === 'human').length,
+          seats: room.seats.length,
+          joinable: room.screen === 'lobby' && room.seats.some(s => s.kind === 'open' || s.kind === 'ai')
+        };
+      });
+    return json(res, 200, { rooms: list });
+  }
 
   if (p === '/api/stream' && req.method === 'GET') {
     const room = rooms.get(String(url.searchParams.get('code') || '').toUpperCase());

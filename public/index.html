@@ -24,12 +24,12 @@
             <button id="btnCreate" class="btn primary big">ルームを作る</button>
           </div>
           <div class="title-sep"></div>
-          <div class="title-col">
-            <label class="col-head" for="inCode">ルームコードで参加</label>
-            <div class="join-row">
-              <input id="inCode" class="text-in code-in" maxlength="4" autocomplete="off" placeholder="ABCD">
-              <button id="btnJoin" class="btn big">参加する</button>
+          <div class="title-col room-list-col">
+            <div class="room-list-head">
+              <span class="col-head">部屋一覧</span>
+              <button id="btnRefreshRooms" class="btn small">更新</button>
             </div>
+            <div id="roomList"></div>
           </div>
         </div>
         <p id="titleMsg" class="msg" role="alert"></p>
@@ -55,7 +55,7 @@
       </div>
       <div id="seatList"></div>
       <div class="invite">
-        <span class="muted">招待：ルームコードを伝えるか、下のURLを共有</span>
+        <span class="muted">招待：下のURLを共有するか、タイトル画面の部屋一覧から参加</span>
         <div id="inviteList"></div>
       </div>
     </div>

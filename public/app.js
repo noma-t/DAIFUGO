@@ -98,10 +98,11 @@
     $('#titleMsg').textContent = msg || '';
     resetGameDom();
     show('title');
+    loadRooms();
   }
 
   // ---------------------------------------------------------------- タイトル
-  const inName = $('#inName'), inCode = $('#inCode');
+  const inName = $('#inName');
   try { inName.value = localStorage.getItem('daifugo:name') || ''; } catch (e) { /* */ }
   function myName() {
     const n = inName.value.trim() || 'プレイヤー';
@@ -129,18 +130,49 @@
       connect(r.code, r.token);
     } catch (e) { $('#titleMsg').textContent = e.message; }
   });
-  async function join() {
-    const code = inCode.value.trim().toUpperCase();
-    if (code.length !== 4) { $('#titleMsg').textContent = 'ルームコードは4文字です'; return; }
+  async function joinRoom(code) {
     let token = null;
     try { token = localStorage.getItem(storeKey(code)); } catch (e) { /* */ }
     try {
       const r = await api('/api/join', { code, name: myName(), token });
       connect(r.code, r.token);
-    } catch (e) { $('#titleMsg').textContent = e.message; }
+    } catch (e) { $('#titleMsg').textContent = e.message; loadRooms(); }
   }
-  $('#btnJoin').addEventListener('click', join);
-  inCode.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+
+  // 立っている部屋の一覧（手動更新）
+  const ROOM_STATUS = { lobby: '募集中', game: 'ゲーム中', result: 'リザルト' };
+  async function loadRooms() {
+    const list = $('#roomList');
+    let rooms;
+    try {
+      const r = await fetch('/api/rooms', { cache: 'no-store' });
+      if (!r.ok) throw new Error();
+      rooms = (await r.json()).rooms || [];
+    } catch (e) {
+      $('#titleMsg').textContent = '部屋一覧を取得できませんでした';
+      return;
+    }
+    if (!rooms.length) { list.innerHTML = '<p class="room-empty muted">立っている部屋はありません</p>'; return; }
+    list.innerHTML = rooms.map(rm => {
+      let token = null;
+      try { token = localStorage.getItem(storeKey(rm.code)); } catch (e) { /* */ }
+      const full = rm.screen === 'lobby' && !rm.joinable;
+      const status = full ? '満席' : ROOM_STATUS[rm.screen] || rm.screen;
+      const enabled = token || rm.joinable;
+      return '<div class="room-row">' +
+        '<span class="room-host">' + esc(rm.hostName) + 'の部屋</span>' +
+        '<span class="room-count muted">人間 ' + rm.humans + ' / 席 ' + rm.seats + '</span>' +
+        '<span class="room-status' + (rm.screen === 'lobby' && !full ? ' open' : '') + '">' + status + '</span>' +
+        '<button class="btn small room-join" data-code="' + esc(rm.code) + '"' + (enabled ? '' : ' disabled') + '>' + (token ? '戻る' : '参加') + '</button>' +
+        '</div>';
+    }).join('');
+  }
+  $('#roomList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-code]');
+    if (!b || b.disabled) return;
+    joinRoom(b.dataset.code);
+  });
+  $('#btnRefreshRooms').addEventListener('click', () => { $('#titleMsg').textContent = ''; loadRooms(); });
 
   // ---------------------------------------------------------------- 表示更新
   function onView(v) {
@@ -1047,7 +1079,6 @@
     const q = new URLSearchParams(location.search);
     const code = (q.get('room') || '').toUpperCase();
     if (code) {
-      inCode.value = code;
       let token = null;
       try { token = localStorage.getItem(storeKey(code)); } catch (e) { /* */ }
       if (token) {
@@ -1061,6 +1092,7 @@
       }
     }
     show('title');
+    loadRooms();
     inName.focus();
   })();
 })();

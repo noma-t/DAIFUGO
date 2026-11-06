@@ -79,11 +79,18 @@ button, input, select { font-family: inherit; }
 .field-label, .col-head { font-size: 16px; color: var(--muted); }
 .text-in { height: 48px; padding: 0 14px; font-size: 22px; background: var(--card); color: var(--bg); border: 3px solid var(--ink); outline: none; }
 .text-in:focus { border-color: var(--accent); }
-.code-in { width: 160px; text-transform: uppercase; letter-spacing: 0.2em; }
 .title-actions { display: flex; gap: 24px; margin-top: 8px; }
 .title-col { flex: 1; display: flex; flex-direction: column; gap: 10px; }
 .title-sep { width: 3px; background: var(--ink); }
-.join-row { display: flex; gap: 12px; }
+.room-list-col { flex: 2; min-width: 0; }
+.room-list-head { display: flex; align-items: center; justify-content: space-between; }
+#roomList { max-height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+.room-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--ink); }
+.room-host { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-count { font-size: 14px; white-space: nowrap; }
+.room-status { padding: 2px 8px; font-size: 13px; background: var(--btn2); color: var(--muted); white-space: nowrap; }
+.room-status.open { background: var(--accent); color: var(--bg); }
+.room-empty { margin: 6px 0; font-size: 15px; }
 
 /* ---------- ルームトップ ---------- */
 .lb-seats { position: absolute; left: 40px; top: 72px; width: 450px; height: 560px; padding: 18px; display: flex; flex-direction: column; }
