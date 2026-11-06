@@ -483,11 +483,12 @@
     finishPost(st);
   }
 
-  function sfbOn(st, kind) {
-    const R = st.rules;
+  // 特殊上がり禁止がその効果に適用されるか
+  function sfbBlocked(R, kind) {
     if (!R.specialFinishBan) return false;
-    return kind === 'bomber' ? R.sfbBomber : kind === 'give7' ? R.sfbSeven : R.sfbTen;
+    return kind === 'bomber' ? R.sfbBomber : kind === 'give7' ? R.sfbSeven : kind === 'discard10' ? R.sfbTen : false;
   }
+  function sfbOn(st, kind) { return sfbBlocked(st.rules, kind); }
 
   function doChoose(st, ids) {
     const pd = st.pending;
@@ -530,7 +531,7 @@
   function bomberSelectable(rules, hand, picks, max, rank) {
     if (picks.indexOf(rank) >= 0) return true;
     if (picks.length >= max) return false;
-    if (rules.specialFinishBan && rules.sfbBomber && hand.length) {
+    if (sfbBlocked(rules, 'bomber') && hand.length) {
       const after = picks.concat([rank]);
       if (hand.every(c => after.indexOf(c.r) >= 0)) return false;
     }
@@ -664,6 +665,6 @@
     makeDeck, shuffle, sortCards, strength, cardLabel,
     analyze, canBeat, validatePlay, legalMoves, legalMovesCtx, candidateSets, isBannedFinish,
     ctxOf, titleOf, bindLabel, newGame, act, awaiting, places,
-    bomberRankList, bomberSelectable, nextSeat
+    bomberRankList, bomberSelectable, nextSeat, sfbBlocked
   };
 });

@@ -715,7 +715,7 @@
     const k = S.csel.size;
     const toName = cm.to >= 0 && g.players[cm.to] ? esc(g.players[cm.to].name) : '';
     const R = g.ctx.rules;
-    const sfb = R.specialFinishBan && ((cm.kind === 'give7' && R.sfbSeven) || (cm.kind === 'discard10' && R.sfbTen));
+    const sfb = E.sfbBlocked(R, cm.kind);
     const blocked = sfb && k > 0 && k === g.hand.length;
     let title, text, btns;
     if (cm.kind === 'exchange') {
@@ -769,7 +769,7 @@
     const lastPlay = g.field.length ? g.field[g.field.length - 1] : null;
     const qs = lastPlay && lastPlay.seat === g.mySeat ? lastPlay.cards : [];
     const ranks = E.bomberRankList(R);
-    const sfb = R.specialFinishBan && R.sfbBomber;
+    const sfb = E.sfbBlocked(R, 'bomber');
     const grid = ranks.map(r => {
       const on = S.picks.indexOf(r) >= 0;
       const ok = E.bomberSelectable(R, g.hand, S.picks, max, r);
