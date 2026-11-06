@@ -203,6 +203,7 @@
     { k: 'tenDiscard', name: '10捨て', desc: '10を出すと手札を捨てられる' },
     { k: 'passPersist', name: 'パス継続', desc: 'パスしたら場が流れるまで出せない（オフならパスはその手番だけ）' },
     { k: 'jokers', name: 'ジョーカーの枚数', type: 'jokers' },
+    { k: 'jokerEffect', name: 'ジョーカーの数字効果', desc: '7＋JKなら7渡し2枚分など、ジョーカーが代わりになった数字の効果も発動する' },
     { k: 'finishBan', name: '上がり禁止', desc: '選んだカードを最後に出して上がれない', subs: [{ k: 'banJoker', name: 'JK' }, { k: 'banTwo', name: '2' }, { k: 'banEight', name: '8' }, { k: 'banSpade3', name: '♠3' }] },
     { k: 'queenBomber', name: 'クイーンボンバー', desc: 'Qを出すと数字を宣言し、全員がその数字を捨てる', subs: [{ k: 'bomberMustFull', name: '必ず枚数分宣言' }] },
     { k: 'specialFinishBan', name: '特殊上がり禁止', desc: '特殊効果で手札がなくなる上がり方を禁止', subs: [{ k: 'sfbBomber', name: 'クイーンボンバー' }, { k: 'sfbSeven', name: '7渡し' }, { k: 'sfbTen', name: '10捨て' }] }

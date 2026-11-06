@@ -108,7 +108,9 @@ function moveCost(st, seat, mv, level, ctx) {
   if (jUsed && !cb.jokerSingle && remain > 2) cost += 6 * jUsed;
   if (cb.jokerSingle && remain > 3) cost += 6;
   if (s >= 14 && remain > 4 && cb.type !== 'seq') cost += 3;
-  if (R.eightCut && cb.reps.indexOf(8) >= 0) cost -= 2;
+  // 8切りが発動するか（jokerEffect がオフならジョーカーが代わりになった8では切れない）
+  const cuts8 = R.eightCut && (R.jokerEffect ? cb.reps.indexOf(8) >= 0 : !!used[8]);
+  if (cuts8) cost -= 2;
 
   if (level === 3 && remainingIsOneCombo(st, hand, mv) && s >= 13) cost -= 20;
   if (level >= 4) {
@@ -124,7 +126,7 @@ function moveCost(st, seat, mv, level, ctx) {
       const avg = rest.length ? rest.reduce((a, c) => a + E.strength(c.r, st.revolution), 0) / rest.length : 10;
       cost += avg < 9 ? -14 : 12;
     }
-    if (R.eightCut && cb.reps.indexOf(8) >= 0 && st.fieldCombo) cost -= 3;
+    if (cuts8 && st.fieldCombo) cost -= 3;
     if (ctx.danger && st.fieldCombo) cost -= 4;
   }
   return cost;
