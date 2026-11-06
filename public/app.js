@@ -450,7 +450,7 @@
         '<span class="opp-act ' + (blink ? 'blink' : '') + '">' + esc(p.out ? '' : stText) + '</span></div>';
     }).join('');
 
-    $('#felt').classList.toggle('myturn', myTurn(g));
+    $('#felt').classList.toggle('myturn', myTurn(g) || !!choiceMode(g));
     renderField(g);
     renderPile(g);
 
@@ -622,8 +622,7 @@
         S.handEls.set(c.id, el);
       }
       const on = cm ? S.csel.has(c.id) : S.sel.has(c.id);
-      el.classList.toggle('sel', on && !cm);
-      el.classList.toggle('pick', on && !!cm);
+      el.classList.toggle('sel', on);
       el.classList.toggle('ghosted', !!(dragging && on));
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
       let playable = true, hint = false, dim = false;
