@@ -197,10 +197,11 @@ button, input, select { font-family: inherit; }
 #hand .card.nogo { cursor: not-allowed; }
 #hand.locked .card { cursor: default; }
 
-#mePanel { position: absolute; left: 1100px; top: 540px; width: 140px; display: flex; flex-direction: column; gap: 12px; }
+#mePanel { position: absolute; left: 1100px; top: 540px; width: 140px; display: flex; flex-direction: column; gap: 8px; }
 #meInfo { font-size: 14px; color: var(--muted); text-align: right; min-height: 34px; line-height: 1.3; }
 #meInfo .me-name.turn { color: var(--accent); }
-.act-btn { width: 140px; height: 52px; font-size: 20px; padding: 0; }
+.auto-pass-toggle { width: 140px; height: 28px; font-size: 14px; }
+.act-btn { width: 140px; height: 44px; font-size: 20px; padding: 0; }
 
 #timer { position: absolute; left: 40px; top: 508px; width: 1200px; height: 16px; background: var(--ink); border: 3px solid var(--ink); }
 #timerFill { height: 10px; width: 0; background: #5b6290; }
