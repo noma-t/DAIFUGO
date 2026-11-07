@@ -9,7 +9,7 @@
     scale: 1, code: null, token: null, es: null, view: null, screen: null, offset: 0,
     sel: new Set(), groups: [], csel: new Set(), picks: [], dlgKey: null, choiceKey: null,
     ptr: null, handPos: {}, fieldEls: new Map(), handEls: new Map(), oppPos: {},
-    banners: [], bannerTimer: null
+    banners: [], bannerTimer: null, ackId: null, ackSent: null, ackShowAt: 0, ackTimer: null
   };
 
   const FELT = { x: 40, y: 72, w: 1200, h: 420 };
@@ -19,7 +19,11 @@
     1: [[545, 120]],
     2: [[330, 136], [760, 136]],
     3: [[70, 200], [545, 120], [1030, 200]],
-    4: [[70, 200], [330, 136], [760, 136], [1030, 200]]
+    4: [[70, 200], [330, 136], [760, 136], [1030, 200]],
+    5: [[70, 230], [300, 120], [545, 100], [790, 120], [1030, 230]],
+    6: [[70, 240], [150, 105], [420, 96], [670, 96], [930, 105], [1030, 240]],
+    7: [[70, 240], [110, 105], [340, 96], [545, 96], [750, 96], [970, 105], [1030, 240]],
+    8: [[70, 240], [110, 105], [340, 96], [545, 96], [750, 96], [970, 105], [1030, 240], [545, 400]]
   };
   const PLAY_OFFS = [[0, 0, 0], [16, -10, 5], [-14, 8, -6], [10, 12, 3], [-12, -8, -4], [6, 6, 7]];
 
@@ -140,34 +144,81 @@
     $('#titleMsg').textContent = msg || '';
     resetGameDom();
     show('title');
+    loadRooms();
   }
 
   // ---------------------------------------------------------------- タイトル
-  const inName = $('#inName'), inCode = $('#inCode');
+  const inName = $('#inName');
   try { inName.value = localStorage.getItem('daifugo:name') || ''; } catch (e) { /* */ }
   function myName() {
     const n = inName.value.trim() || 'プレイヤー';
     try { localStorage.setItem('daifugo:name', n); } catch (e) { /* */ }
     return n;
   }
+  // 前回の対戦設定（ルール・持ち時間・席構成）を Cookie に保存／復元する
+  const PRESET_COOKIE = 'daifugo_preset';
+  function loadPreset() {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + PRESET_COOKIE + '=([^;]*)'));
+    if (!m) return null;
+    try { return JSON.parse(decodeURIComponent(m[1])); } catch (e) { return null; }
+  }
+  function savePreset(L) {
+    const preset = {
+      settings: L.settings,
+      seats: L.seats.map(s => s.isMe ? { kind: 'me' } : s.kind === 'ai' ? { kind: 'ai', level: s.level } : { kind: 'open' })
+    };
+    document.cookie = PRESET_COOKIE + '=' + encodeURIComponent(JSON.stringify(preset)) + '; path=/; max-age=31536000; SameSite=Lax';
+  }
+
   $('#btnCreate').addEventListener('click', async () => {
     try {
-      const r = await api('/api/create', { name: myName() });
+      const r = await api('/api/create', { name: myName(), preset: loadPreset() });
       connect(r.code, r.token);
     } catch (e) { $('#titleMsg').textContent = e.message; }
   });
-  async function join() {
-    const code = inCode.value.trim().toUpperCase();
-    if (code.length !== 4) { $('#titleMsg').textContent = 'ルームコードは4文字です'; return; }
+  async function joinRoom(code) {
     let token = null;
     try { token = localStorage.getItem(storeKey(code)); } catch (e) { /* */ }
     try {
       const r = await api('/api/join', { code, name: myName(), token });
       connect(r.code, r.token);
-    } catch (e) { $('#titleMsg').textContent = e.message; }
+    } catch (e) { $('#titleMsg').textContent = e.message; loadRooms(); }
   }
-  $('#btnJoin').addEventListener('click', join);
-  inCode.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+
+  // 立っている部屋の一覧（手動更新）
+  const ROOM_STATUS = { lobby: '募集中', game: 'ゲーム中', result: 'リザルト' };
+  async function loadRooms() {
+    const list = $('#roomList');
+    let rooms;
+    try {
+      const r = await fetch('/api/rooms', { cache: 'no-store' });
+      if (!r.ok) throw new Error();
+      rooms = (await r.json()).rooms || [];
+    } catch (e) {
+      $('#titleMsg').textContent = '部屋一覧を取得できませんでした';
+      return;
+    }
+    if (!rooms.length) { list.innerHTML = '<p class="room-empty muted">立っている部屋はありません</p>'; return; }
+    list.innerHTML = rooms.map(rm => {
+      let token = null;
+      try { token = localStorage.getItem(storeKey(rm.code)); } catch (e) { /* */ }
+      const full = rm.screen === 'lobby' && !rm.joinable;
+      const status = full ? '満席' : ROOM_STATUS[rm.screen] || rm.screen;
+      const enabled = token || rm.joinable;
+      return '<div class="room-row">' +
+        '<span class="room-host">' + esc(rm.hostName) + 'の部屋</span>' +
+        '<span class="room-count muted">人間 ' + rm.humans + ' / 席 ' + rm.seats + '</span>' +
+        '<span class="room-status' + (rm.screen === 'lobby' && !full ? ' open' : '') + '">' + status + '</span>' +
+        '<button class="btn small room-join" data-code="' + esc(rm.code) + '"' + (enabled ? '' : ' disabled') + '>' + (token ? '戻る' : '参加') + '</button>' +
+        '</div>';
+    }).join('');
+  }
+  $('#roomList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-code]');
+    if (!b || b.disabled) return;
+    joinRoom(b.dataset.code);
+  });
+  $('#btnRefreshRooms').addEventListener('click', () => { $('#titleMsg').textContent = ''; loadRooms(); });
 
   // ---------------------------------------------------------------- 表示更新
   function onView(v) {
@@ -196,7 +247,9 @@
     { k: 'fiveSkip', name: '5飛び', desc: '5を出すと次のプレイヤーを飛ばす' },
     { k: 'sevenPass', name: '7渡し', desc: '7を出すと手札を次のプレイヤーに渡せる' },
     { k: 'tenDiscard', name: '10捨て', desc: '10を出すと手札を捨てられる' },
+    { k: 'passPersist', name: 'パス継続', desc: 'パスしたら場が流れるまで出せない（オフならパスはその手番だけ）' },
     { k: 'jokers', name: 'ジョーカーの枚数', type: 'jokers' },
+    { k: 'jokerEffect', name: 'ジョーカーの数字効果', desc: '7＋JKなら7渡し2枚分など、ジョーカーが代わりになった数字の効果も発動する' },
     { k: 'finishBan', name: '上がり禁止', desc: '選んだカードを最後に出して上がれない', subs: [{ k: 'banJoker', name: 'JK' }, { k: 'banTwo', name: '2' }, { k: 'banEight', name: '8' }, { k: 'banSpade3', name: '♠3' }] },
     { k: 'queenBomber', name: 'クイーンボンバー', desc: 'Qを出すと数字を宣言し、全員がその数字を捨てる', subs: [{ k: 'bomberMustFull', name: '必ず枚数分宣言' }] },
     { k: 'specialFinishBan', name: '特殊上がり禁止', desc: '特殊効果で手札がなくなる上がり方を禁止', subs: [{ k: 'sfbBomber', name: 'クイーンボンバー' }, { k: 'sfbSeven', name: '7渡し' }, { k: 'sfbTen', name: '10捨て' }] }
@@ -212,6 +265,7 @@
     const L = v.lobby;
     const host = v.me.isHost;
     const dis = host ? '' : ' disabled';
+    if (host) savePreset(L);
     $('#lbCode').textContent = 'ROOM ' + v.code;
     const humans = L.seats.filter(s => s.kind === 'human').length;
     const ais = L.seats.filter(s => s.kind === 'ai').length;
@@ -219,7 +273,7 @@
     $('#lbHostNote').textContent = host ? 'あなたがホストです' : 'ルールと席はホストが決めます';
     $('#seatNum').textContent = L.seats.length;
     $('#seatMinus').disabled = !host || L.seats.length <= 3;
-    $('#seatPlus').disabled = !host || L.seats.length >= 5;
+    $('#seatPlus').disabled = !host || L.seats.length >= 8;
 
     $('#seatList').innerHTML = L.seats.map((s, i) => {
       let body;
@@ -237,13 +291,6 @@
       }
       return '<div class="seat"><span class="seat-no">' + (i + 1) + '</span>' + body + '</div>';
     }).join('');
-
-    const urls = [location.origin + '/?room=' + v.code];
-    (v.lan || []).forEach(u => {
-      const x = u.replace(/\/$/, '') + '/?room=' + v.code;
-      if (urls.indexOf(x) < 0) urls.push(x);
-    });
-    $('#inviteList').innerHTML = urls.map(u => '<div class="invite-row"><span class="invite-url">' + esc(u) + '</span><button class="btn small" data-copy="' + esc(u) + '">コピー</button></div>').join('');
 
     const st = L.settings;
     const R = st.rules, T = st.timer;
@@ -322,6 +369,10 @@
   $('#lbLeave').addEventListener('click', () => {
     send({ type: 'leave' }).catch(() => {}).finally(() => leaveToTitle(''));
   });
+  $('#gLeave').addEventListener('click', () => {
+    if (!confirm('ゲームから退出しますか？\nあなたの席は以降AIが引き継ぎます。')) return;
+    send({ type: 'leave' }).catch(() => {}).finally(() => leaveToTitle(''));
+  });
 
   // ---------------------------------------------------------------- カード描画
   function cardCls(c) { return c.r === 16 ? 'jk' : (c.s === 'H' || c.s === 'D') ? 'red' : ''; }
@@ -355,6 +406,12 @@
     $('#dialog').classList.remove('on');
     $('#dialog').innerHTML = '';
     $('#choicePanel').classList.remove('on');
+    $('#ackDialog').classList.remove('on');
+    $('#ackDialog').innerHTML = '';
+    S.ackId = null;
+    S.ackSent = null;
+    clearTimeout(S.ackTimer);
+    S.ackTimer = null;
     endDrag();
   }
 
@@ -365,9 +422,9 @@
     return r;
   }
 
-  function myTurn(g) { return g.phase === 'play' && g.turn === g.mySeat && g.mySeat >= 0; }
+  function myTurn(g) { return !g.ack && g.phase === 'play' && g.turn === g.mySeat && g.mySeat >= 0; }
   function choiceMode(g) {
-    if (g.mySeat < 0) return null;
+    if (g.mySeat < 0 || g.ack) return null;
     if (g.phase === 'choice' && g.pending && g.pending.seat === g.mySeat && g.pending.type !== 'bomber') {
       return { kind: g.pending.type, max: g.pending.max, to: g.pending.to, exact: false };
     }
@@ -409,6 +466,7 @@
     const seats = oppSeats(g);
     const lay = OPP_LAYOUT[seats.length] || OPP_LAYOUT[4];
     S.oppPos = {};
+    $('#opps').classList.toggle('dense', seats.length >= 6);
     $('#opps').innerHTML = seats.map((s, j) => {
       const p = g.players[s];
       const pos = lay[j];
@@ -430,6 +488,7 @@
         '<span class="opp-act ' + (blink ? 'blink' : '') + '">' + esc(p.out ? '' : stText) + '</span></div>';
     }).join('');
 
+    $('#felt').classList.toggle('myturn', myTurn(g) || !!choiceMode(g));
     renderField(g);
     renderPile(g);
 
@@ -448,7 +507,40 @@
     updateButtons();
     renderChoice(g);
     renderBomber(g);
+    renderAck(g);
     processEvents(g, prevG, oldPos);
+    maybeAutoPass(g);
+  }
+
+  // ---------------------------------------------------------------- 自動パス
+  const AUTO_PASS_KEY = 'daifugo:autoPass';
+  try { S.autoPass = localStorage.getItem(AUTO_PASS_KEY) === '1'; } catch (e) { S.autoPass = false; }
+  S.autoPassSent = false;
+
+  function renderAutoPassToggle() {
+    const b = $('#autoPassToggle');
+    b.classList.toggle('on', S.autoPass);
+    b.setAttribute('aria-pressed', S.autoPass ? 'true' : 'false');
+    b.textContent = '自動パス ' + (S.autoPass ? 'ON' : 'OFF');
+  }
+  renderAutoPassToggle();
+  $('#autoPassToggle').addEventListener('click', () => {
+    S.autoPass = !S.autoPass;
+    try { localStorage.setItem(AUTO_PASS_KEY, S.autoPass ? '1' : '0'); } catch (e) { /* */ }
+    renderAutoPassToggle();
+    if (S.view && S.view.game) maybeAutoPass(S.view.game);
+  });
+
+  // 自分の番で場にカードがあり、出せる手が1つもなければ即パスする
+  function maybeAutoPass(g) {
+    if (!myTurn(g)) { S.autoPassSent = false; return; }
+    if (!S.autoPass || S.autoPassSent || !g.ctx.field) return;
+    const moves = turnMoves(g);
+    if (!moves || moves.length) return;
+    S.autoPassSent = true;
+    S.sel.clear();
+    toast('自動パス');
+    send({ type: 'pass' }).catch(() => {});
   }
 
   function renderField(g) {
@@ -495,7 +587,8 @@
 
   function handLayout(n) {
     const step = n > 1 ? Math.min(72, (HAND_W - 66) / (n - 1)) : 0;
-    return i => i * step;
+    const off = n ? Math.round((HAND_W - (66 + step * (n - 1))) / 2) : 0;
+    return i => off + i * step;
   }
 
   // 自分の番に出せる手（ビューごとにキャッシュ）
@@ -567,12 +660,12 @@
         S.handEls.set(c.id, el);
       }
       const on = cm ? S.csel.has(c.id) : S.sel.has(c.id);
-      el.classList.toggle('sel', on && !cm);
-      el.classList.toggle('pick', on && !!cm);
-      el.classList.toggle('ghosted', !!(dragging && on && !cm));
+      el.classList.toggle('sel', on);
+      el.classList.toggle('ghosted', !!(dragging && on));
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
       let playable = true, hint = false, dim = false;
-      if (moves) {
+      if (!moves && !cm && g.mySeat >= 0) dim = true; // 自分の番でないときは全カードを暗転
+      else if (moves) {
         playable = moves.some(m => m.has(c.id));
         if (!playable) dim = true;
         else if (!on && selArr.length) {
@@ -677,8 +770,17 @@
     if (!d.active) {
       if (Math.hypot(p.x - d.x, p.y - d.y) < 7) return;
       const g = S.view && S.view.game;
-      if (!g || !myTurn(g)) return;
-      if (!S.sel.has(d.id) && !selectPlayable(g, d.id)) { S.ptr = null; return; }
+      const cm = g && choiceMode(g);
+      if (!g || !(cm || myTurn(g))) return;
+      if (cm) {
+        // 7渡し・10捨て・カード交換：ドラッグしたカードを選択に加える
+        if (!S.csel.has(d.id)) {
+          if (S.csel.size >= cm.max) {
+            if (cm.max === 1) S.csel.clear(); else { S.ptr = null; return; }
+          }
+          S.csel.add(d.id);
+        }
+      } else if (!S.sel.has(d.id) && !selectPlayable(g, d.id)) { S.ptr = null; return; }
       d.active = true;
       buildGhost(g);
       refreshHand();
@@ -695,7 +797,7 @@
     if (d.active) {
       const over = d.over;
       endDrag();
-      if (over) tryPlay();
+      if (over) { const g = S.view && S.view.game; if (g && choiceMode(g)) tryChoose(); else tryPlay(); }
       refreshHand();
     } else {
       S.ptr = null;
@@ -709,7 +811,8 @@
     $('#felt').classList.remove('over');
   }
   function buildGhost(g) {
-    const cards = g.hand.filter(c => S.sel.has(c.id));
+    const picked = choiceMode(g) ? S.csel : S.sel;
+    const cards = g.hand.filter(c => picked.has(c.id));
     const n = cards.length;
     const gh = $('#ghost');
     gh.innerHTML = cards.map((c, k) => cardHtml(c, 'lg', 'margin-left:' + (k === 0 ? 0 : -40) + 'px;transform:rotate(' + ((k - (n - 1) / 2) * 9) + 'deg)')).join('');
@@ -735,7 +838,7 @@
     const k = S.csel.size;
     const toName = cm.to >= 0 && g.players[cm.to] ? esc(g.players[cm.to].name) : '';
     const R = g.ctx.rules;
-    const sfb = R.specialFinishBan && ((cm.kind === 'give7' && R.sfbSeven) || (cm.kind === 'discard10' && R.sfbTen));
+    const sfb = E.sfbBlocked(R, cm.kind);
     const blocked = sfb && k > 0 && k === g.hand.length;
     let title, text, btns;
     if (cm.kind === 'exchange') {
@@ -754,13 +857,28 @@
     cp.innerHTML = '<span class="cp-title">' + title + '</span><span class="cp-text">' + text + '</span><div class="cp-btns">' + btns + '</div>';
     cp.classList.add('on');
   }
+  // 選択中のカードで確定する（「渡す／捨てる」ボタンとD&Dドロップ共通）
+  function tryChoose() {
+    const g = S.view && S.view.game;
+    const cm = g && choiceMode(g);
+    if (!cm) return false;
+    const k = S.csel.size;
+    const blocked = E.sfbBlocked(g.ctx.rules, cm.kind) && k > 0 && k === g.hand.length;
+    if (cm.kind === 'exchange' ? k !== cm.max : (k === 0 || blocked)) {
+      const f = $('#felt');
+      f.classList.remove('bad'); void f.offsetWidth; f.classList.add('bad');
+      return false;
+    }
+    const ids = Array.from(S.csel);
+    S.csel.clear();
+    send({ type: 'choose', cards: ids }).catch(() => {});
+    return true;
+  }
   $('#choicePanel').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
     if (b.id === 'cpOk') {
-      const ids = Array.from(S.csel);
-      S.csel.clear();
-      send({ type: 'choose', cards: ids }).catch(() => {});
+      tryChoose();
     } else if (b.id === 'cpNone') {
       S.csel.clear();
       send({ type: 'choose', cards: [] }).catch(() => {});
@@ -770,9 +888,9 @@
   // ---------------- クイーンボンバー宣言
   function renderBomber(g) {
     const dlg = $('#dialog');
-    const mine = g.phase === 'choice' && g.pending && g.pending.type === 'bomber' && g.pending.seat === g.mySeat;
+    const mine = !g.ack && g.phase === 'choice' && g.pending && g.pending.type === 'bomber' && g.pending.seat === g.mySeat;
     if (!mine) {
-      dlg.classList.remove('on');
+      dlg.classList.remove('on', 'still');
       dlg.innerHTML = '';
       S.dlgKey = null;
       return;
@@ -789,7 +907,7 @@
     const lastPlay = g.field.length ? g.field[g.field.length - 1] : null;
     const qs = lastPlay && lastPlay.seat === g.mySeat ? lastPlay.cards : [];
     const ranks = E.bomberRankList(R);
-    const sfb = R.specialFinishBan && R.sfbBomber;
+    const sfb = E.sfbBlocked(R, 'bomber');
     const grid = ranks.map(r => {
       const on = S.picks.indexOf(r) >= 0;
       const ok = E.bomberSelectable(R, g.hand, S.picks, max, r);
@@ -799,6 +917,7 @@
     }).join('');
     const k = S.picks.length;
     const okBtn = R.bomberMustFull ? k === max : true;
+    dlg.classList.toggle('still', dlg.classList.contains('on')); // 再描画時は表示アニメーションを出さない
     dlg.innerHTML = '<div class="dlg-shade"></div><div class="dlg" role="dialog" aria-label="クイーンボンバー">' +
       '<div class="dlg-head"><span class="dlg-title">クイーンボンバー</span><span class="muted" id="dlgTime"></span></div>' +
       '<div class="dlg-mid"><div class="mini-row">' + qs.map(c => cardHtml(c, 'sm')).join('') + '</div>' +
@@ -830,6 +949,75 @@
     }
   });
 
+  // ---------------- 結果確認（クイーンボンバー・カード交換）
+  // OK を押すまで閉じない。全員の OK でサーバーが進行を再開する
+  function renderAck(g) {
+    const box = $('#ackDialog');
+    const ack = g.ack;
+    const show = ack && ack.mine && S.ackSent !== ack.id;
+    if (!show) {
+      clearTimeout(S.ackTimer);
+      S.ackTimer = null;
+      box.classList.remove('on');
+      box.innerHTML = '';
+      if (!ack) { S.ackId = null; S.ackSent = null; }
+      return;
+    }
+    if (S.ackId !== ack.id) {
+      S.ackId = ack.id;
+      // カードが飛ぶ演出を見せてから開く
+      S.ackShowAt = Date.now() + (ack.kind === 'bomber' ? 0 : 900);
+    }
+    const wait = S.ackShowAt - Date.now();
+    if (wait > 0) {
+      if (!S.ackTimer) S.ackTimer = setTimeout(() => { S.ackTimer = null; if (S.view && S.view.game) renderAck(S.view.game); }, wait);
+      return;
+    }
+    const firstOpen = !box.classList.contains('on');
+    box.innerHTML = ack.kind === 'bomber' ? bomberAckHtml(g, ack) : exchangeAckHtml(g, ack);
+    if (firstOpen) box.classList.add('on');
+  }
+  function ackCards(cards) {
+    return cards && cards.length ? '<div class="mini-row ack-cards">' + cards.map(c => cardHtml(c, 'sm')).join('') + '</div>' : '<span class="muted">なし</span>';
+  }
+  function ackFoot(g, ack) {
+    const others = ack.waiting.length - (ack.mine ? 1 : 0);
+    return '<div class="dlg-foot"><span class="note">' + (others > 0 ? '全員がOKを押すと再開します' : '') + '</span>' +
+      '<div class="cp-btns"><button class="btn primary" id="ackOk">OK</button></div></div>';
+  }
+  function bomberAckHtml(g, ack) {
+    const rows = g.players.map((p, s) => {
+      const L = ack.losses[s] || [];
+      if (p.out && !L.length) return '';
+      return '<div class="ack-row' + (s === g.mySeat ? ' me' : '') + '"><span class="ack-name">' + esc(nameOf(g, s)) + '</span>' + ackCards(L) + '</div>';
+    }).join('');
+    return '<div class="dlg-shade"></div><div class="dlg ack-dlg" role="dialog" aria-label="クイーンボンバーの結果">' +
+      '<div class="dlg-head"><span class="dlg-title">クイーンボンバー</span><span class="muted" id="ackTime"></span></div>' +
+      '<span class="dlg-text">' + esc(nameOf(g, ack.seat)) + ' が宣言：' +
+      ack.ranks.map(r => '<span class="bn-chip ack-chip">' + E.RANK_LABEL[r] + '</span>').join('') + '</span>' +
+      '<div class="ack-list"><span class="muted ack-sub">捨てられたカード</span>' + rows + '</div>' +
+      ackFoot(g, ack) + '</div>';
+  }
+  function exchangeAckHtml(g, ack) {
+    const rows = [];
+    (ack.got || []).forEach(x => rows.push('<div class="ack-row"><span class="ack-name">' + esc(nameOf(g, x.from)) + ' から受け取った</span>' + ackCards(x.cards) + '</div>'));
+    (ack.gave || []).forEach(x => rows.push('<div class="ack-row"><span class="ack-name">' + esc(nameOf(g, x.to)) + ' に渡した</span>' + ackCards(x.cards) + '</div>'));
+    return '<div class="dlg-shade"></div><div class="dlg ack-dlg" role="dialog" aria-label="カード交換の結果">' +
+      '<div class="dlg-head"><span class="dlg-title">カード交換</span><span class="muted" id="ackTime"></span></div>' +
+      '<div class="ack-list">' + rows.join('') + '</div>' +
+      ackFoot(g, ack) + '</div>';
+  }
+  $('#ackDialog').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.id !== 'ackOk') return;
+    const g = S.view && S.view.game;
+    if (!g || !g.ack) return;
+    const id = g.ack.id;
+    S.ackSent = id;
+    renderAck(g);
+    send({ type: 'ack', id }).catch(() => { S.ackSent = null; if (S.view && S.view.game) renderAck(S.view.game); });
+  });
+
   // ---------------- 演出
   function nameOf(g, seat) {
     if (seat === g.mySeat) return 'あなた';
@@ -847,7 +1035,8 @@
     el.innerHTML = '<div class="bn-row"><span class="bn-rule">' + esc(b.rule) + '</span>' +
       b.chips.map(c => '<span class="bn-chip">' + esc(c) + '</span>').join('') + '</div><span class="bn-player">' + esc(b.player) + '</span>';
     el.classList.add('on');
-    S.bannerTimer = setTimeout(nextBanner, S.banners.length ? 650 : (b.chips.length ? 1700 : 1150));
+    const hold = S.banners.length ? 650 : (b.chips.length ? 1700 : 1150);
+    S.bannerTimer = setTimeout(nextBanner, hold);
   }
 
   function seatPoint(g, seat, i) {
@@ -889,26 +1078,97 @@
     if (waiting(g) && !waiting(prevG)) SFX.play('turn', delay);
   }
 
+  // 受け渡ししたカード（カード交換・7渡し）を画面中央に一度大きく見せる。
+  // 受け取りは手札の位置へ、渡したカードは相手の席へ飛ばす。連続した場合は順番に表示する。
+  const RECV_HOLD = 1000, RECV_FLY = 520, RECV_GAP = 92, RECV_CARD_TOP = 252;
+  function showTransfer(g, e, sent) {
+    const cards = e.cards;
+    if (!sent) cards.forEach(c => { const h = S.handEls.get(c.id); if (h) h.classList.add('incoming'); });
+    const t = now();
+    const start = Math.max(0, (S.xferUntil || 0) - t);
+    S.xferUntil = t + start + RECV_HOLD + cards.length * 80 + RECV_FLY;
+    setTimeout(() => runTransfer(g, e, sent), start);
+  }
+  function runTransfer(g, e, sent) {
+    const cards = e.cards;
+    const handScale = 66 / 74; // .card.lg → 手札の .card
+
+    const cardsW = 74 + RECV_GAP * (cards.length - 1);
+    const panelW = Math.max(300, cardsW + 60);
+    const panel = document.createElement('div');
+    panel.className = 'recv-panel' + (sent ? ' sent' : '');
+    panel.style.left = (640 - panelW / 2) + 'px';
+    panel.style.width = panelW + 'px';
+    panel.innerHTML = '<span class="recv-label">' +
+      (sent ? esc(nameOf(g, e.to)) + ' に渡した' : esc(nameOf(g, e.from)) + ' から受け取り') + '</span>';
+    $('#fx').appendChild(panel);
+
+    const startX = 640 - cardsW / 2;
+    const flyEls = cards.map((c, i) => {
+      const el = cardEl(c, 'lg recv-card');
+      el.style.left = (startX + i * RECV_GAP) + 'px';
+      el.style.top = RECV_CARD_TOP + 'px';
+      el.style.animationDelay = (i * 80) + 'ms';
+      $('#fx').appendChild(el);
+      return el;
+    });
+
+    setTimeout(() => {
+      panel.classList.add('leave');
+      flyEls.forEach((el, i) => {
+        const c = cards[i];
+        const fromX = startX + i * RECV_GAP;
+        el.classList.add('fly');
+        void el.offsetWidth;
+        el.style.transformOrigin = '0 0';
+        if (sent) {
+          const to = seatPoint(g, e.to, i);
+          el.style.transform = 'translate(' + (to.x - fromX) + 'px,' + (to.y - RECV_CARD_TOP) + 'px) scale(0.5)';
+          el.style.opacity = '0';
+          return;
+        }
+        const to = S.handPos[c.id]; // 表示中に手札が並び替わっても最新の位置へ飛ぶ
+        if (to) {
+          el.style.transform = 'translate(' + (to.x - fromX) + 'px,' + (to.y - RECV_CARD_TOP) + 'px) scale(' + handScale + ')';
+        } else {
+          el.style.opacity = '0';
+        }
+      });
+      setTimeout(() => {
+        panel.remove();
+        flyEls.forEach(el => el.remove());
+        if (!sent) cards.forEach(c => {
+          const h = S.handEls.get(c.id);
+          if (h) h.classList.remove('incoming');
+        });
+      }, RECV_FLY);
+    }, RECV_HOLD + cards.length * 80);
+  }
+
   function processEvents(g, prevG, oldPos) {
     playEventSounds(g, prevG);
     const evs = g.events || [];
     for (const e of evs) {
       if (e.t === 'effect') {
+        // クイーンボンバーは結果確認ポップアップが自分に出る場合は帯を省く（上がり済み等でポップアップが出ない人だけ帯で知らせる）
+        if (e.rule === 'クイーンボンバー' && g.ack && g.ack.mine) continue;
         queueBanner(e.rule, nameOf(g, e.seat), e.chips);
       } else if (e.t === 'finish') {
         queueBanner('上がり', nameOf(g, e.seat), []);
       } else if (e.t === 'bomber') {
+        // 帯を出さない（結果ポップアップが出る）場合は帯の演出待ちが不要なので、すぐカードを飛ばす
+        const flyDelay = g.ack && g.ack.mine ? 100 : 850;
         Object.keys(e.losses).forEach(k => {
           const s = +k;
           const cards = e.losses[k];
           cards.forEach((c, i) => {
             if (s === g.mySeat && oldPos[c.id]) {
               const el = cardEl(c, 'mark');
-              flyEl(el, oldPos[c.id], PILE_PT, 850);
+              flyEl(el, oldPos[c.id], PILE_PT, flyDelay);
             } else {
               const p = seatPoint(g, s, i);
               const el = cardEl(c, 'sm mark');
-              flyEl(el, { x: p.x, y: p.y - 66 }, PILE_PT, 850, { pop: true });
+              flyEl(el, { x: p.x, y: p.y - 66 }, PILE_PT, flyDelay, { pop: true });
             }
           });
         });
@@ -917,6 +1177,10 @@
           const from = e.seat === g.mySeat && oldPos[c.id] ? oldPos[c.id] : seatPoint(g, e.seat, i);
           flyEl(cardEl(c, e.seat === g.mySeat ? '' : 'sm'), from, PILE_PT, 200, { pop: e.seat !== g.mySeat });
         });
+      } else if ((e.t === 'give' || e.t === 'exchange') && e.to === g.mySeat && e.cards) {
+        showTransfer(g, e, false);
+      } else if ((e.t === 'give' || e.t === 'exchange') && e.from === g.mySeat && e.cards) {
+        showTransfer(g, e, true);
       } else if (e.t === 'give' || e.t === 'exchange') {
         const n = e.cards ? e.cards.length : e.count;
         for (let i = 0; i < n; i++) {
@@ -946,8 +1210,8 @@
     const v = S.view;
     if (!v || v.screen !== 'game' || !v.game) return;
     const g = v.game;
-    const seat = awaitedSeat(g);
-    const dl = seat >= 0 ? g.deadlines[seat] : null;
+    const seat = g.ack ? (g.ack.mine && S.ackSent !== g.ack.id ? g.mySeat : -1) : awaitedSeat(g);
+    const dl = g.ack ? g.ack.deadline : seat >= 0 ? g.deadlines[seat] : null;
     const fill = $('#timerFill');
     let secTxt = '';
     if (dl) {
@@ -960,7 +1224,9 @@
     }
     fill.classList.toggle('mine', seat === g.mySeat);
     let info = '';
-    if (g.phase === 'play') {
+    if (g.ack) {
+      info = '結果確認中';
+    } else if (g.phase === 'play') {
       info = g.turn === g.mySeat ? 'あなたの番' : esc(nameOf(g, g.turn)) + 'の番';
     } else if (g.phase === 'choice' && g.pending) {
       info = g.pending.seat === g.mySeat ? 'あなたの番' : esc(nameOf(g, g.pending.seat)) + 'の番';
@@ -974,6 +1240,8 @@
     if (ti.innerHTML !== html) ti.innerHTML = html;
     const dt = $('#dlgTime');
     if (dt) dt.textContent = secTxt ? '残り ' + secTxt + '秒' : '';
+    const at = $('#ackTime');
+    if (at) at.textContent = secTxt ? '残り ' + secTxt + '秒' : '';
   }
   requestAnimationFrame(tick);
 
@@ -1005,7 +1273,6 @@
     const q = new URLSearchParams(location.search);
     const code = (q.get('room') || '').toUpperCase();
     if (code) {
-      inCode.value = code;
       let token = null;
       try { token = localStorage.getItem(storeKey(code)); } catch (e) { /* */ }
       if (token) {
@@ -1019,6 +1286,7 @@
       }
     }
     show('title');
+    loadRooms();
     inName.focus();
   })();
 })();

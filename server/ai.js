@@ -108,7 +108,9 @@ function moveCost(st, seat, mv, level, ctx) {
   if (jUsed && !cb.jokerSingle && remain > 2) cost += 6 * jUsed;
   if (cb.jokerSingle && remain > 3) cost += 6;
   if (s >= 14 && remain > 4 && cb.type !== 'seq') cost += 3;
-  if (R.eightCut && cb.reps.indexOf(8) >= 0) cost -= 2;
+  // 8切りが発動するか（jokerEffect がオフならジョーカーが代わりになった8では切れない）
+  const cuts8 = R.eightCut && (R.jokerEffect ? cb.reps.indexOf(8) >= 0 : !!used[8]);
+  if (cuts8) cost -= 2;
 
   if (level === 3 && remainingIsOneCombo(st, hand, mv) && s >= 13) cost -= 20;
   if (level >= 4) {
@@ -124,7 +126,7 @@ function moveCost(st, seat, mv, level, ctx) {
       const avg = rest.length ? rest.reduce((a, c) => a + E.strength(c.r, st.revolution), 0) / rest.length : 10;
       cost += avg < 9 ? -14 : 12;
     }
-    if (R.eightCut && cb.reps.indexOf(8) >= 0 && st.fieldCombo) cost -= 3;
+    if (cuts8 && st.fieldCombo) cost -= 3;
     if (ctx.danger && st.fieldCombo) cost -= 4;
   }
   return cost;
@@ -204,9 +206,7 @@ function quickChoice(st, seat, kind) {
   const p = st.players[seat];
   if (kind === 'exchange') return { type: 'choose', cards: weakest(p.hand, st.exPending[seat].count, st).map(c => c.id) };
   if (kind === 'give7' || kind === 'discard10') {
-    let k = Math.min(st.pending.max, p.hand.length);
-    if (sfbBlock(st, kind) && k >= p.hand.length) k = p.hand.length - 1;
-    return { type: 'choose', cards: weakest(p.hand, Math.max(0, k), st).map(c => c.id) };
+    return { type: 'choose', cards: weakest(p.hand, choiceCount(st, seat, kind), st).map(c => c.id) };
   }
   if (kind === 'bomber') return { type: 'declare', ranks: bomberPick(st, seat, 2) };
   return null;
@@ -262,7 +262,7 @@ function decideTurnMC(st, seat) {
   const cands = scored.slice(0, 6);
   if (st.fieldCombo) cands.push({ a: { type: 'pass' }, h: 5 });
   cands.forEach(c => { c.sum = 0; c.cnt = 0; });
-  const deadline = Date.now() + 350;
+  const deadline = Date.now() + 120;
   let rounds = 0;
   while (Date.now() < deadline && rounds < 60) {
     rounds++;
@@ -287,17 +287,18 @@ function weakest(hand, k, st) {
   const rev = st ? st.revolution : false;
   return hand.slice().sort((a, b) => E.strength(a.r, rev) - E.strength(b.r, rev)).slice(0, k);
 }
-function sfbBlock(st, kind) {
-  const R = st.rules;
-  if (!R.specialFinishBan) return false;
-  return kind === 'give7' ? R.sfbSeven : kind === 'discard10' ? R.sfbTen : R.sfbBomber;
+// 7渡し・10捨てで選べる最大枚数（特殊上がり禁止なら手札を1枚残す）
+function choiceCount(st, seat, kind) {
+  const n = st.players[seat].hand.length;
+  let k = Math.min(st.pending.max, n);
+  if (E.sfbBlocked(st.rules, kind) && k >= n) k = n - 1;
+  return Math.max(0, k);
 }
 
 function bomberPick(st, seat, level) {
   const pd = st.pending;
   const hand = st.players[seat].hand;
   const ranks = E.bomberRankList(st.rules);
-  const want = st.rules.bomberMustFull ? pd.max : pd.max;
   const picks = [];
   if (level <= 1) {
     const k = st.rules.bomberMustFull ? pd.max : rnd(pd.max + 1);
@@ -320,7 +321,7 @@ function bomberPick(st, seat, level) {
   }
   const order = ranks.slice().sort((a, b) => score[b] - score[a]);
   for (const r of order) {
-    if (picks.length >= want) break;
+    if (picks.length >= pd.max) break;
     if (!st.rules.bomberMustFull && score[r] <= 0) break;
     if (E.bomberSelectable(st.rules, hand, picks, pd.max, r)) picks.push(r);
   }
@@ -335,9 +336,7 @@ function decideChoice(st, seat, kind, level) {
     return { type: 'choose', cards: weakest(p.hand, cnt, st).map(c => c.id) };
   }
   if (kind === 'give7' || kind === 'discard10') {
-    let k = Math.min(st.pending.max, p.hand.length);
-    if (sfbBlock(st, kind) && k >= p.hand.length) k = p.hand.length - 1;
-    k = Math.max(0, k);
+    let k = choiceCount(st, seat, kind);
     if (level <= 1) {
       k = rnd(k + 1);
       return { type: 'choose', cards: E.shuffle(p.hand.slice()).slice(0, k).map(c => c.id) };

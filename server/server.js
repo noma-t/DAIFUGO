@@ -49,20 +49,29 @@ function lanUrls() {
 }
 
 // ---------------------------------------------------------------- ルーム
-function createRoom(hostName) {
+// 前回の対戦設定（クライアントの Cookie 由来）から席構成を復元する
+function presetSeats(list, hostId) {
+  const def = [{ kind: 'human', pid: hostId }, { kind: 'ai', level: 3 }, { kind: 'ai', level: 3 }, { kind: 'ai', level: 3 }];
+  if (!Array.isArray(list) || list.length < 3 || list.length > 8) return def;
+  if (list.filter(x => x && x.kind === 'me').length !== 1) return def;
+  return list.map(x => {
+    if (x && x.kind === 'me') return { kind: 'human', pid: hostId };
+    if (x && x.kind === 'open') return { kind: 'open' };
+    const lv = parseInt(x && x.level, 10);
+    return { kind: 'ai', level: lv >= 1 && lv <= 5 ? lv : 3 };
+  });
+}
+
+function createRoom(hostName, preset) {
+  preset = preset && typeof preset === 'object' ? preset : {};
   const code = newCode();
   const host = { id: rid(6), token: rid(16), name: cleanName(hostName), connected: false, streams: new Set(), dcTimer: null, leftTimer: null };
   const room = {
     code,
     hostId: host.id,
     members: new Map([[host.id, host]]),
-    seats: [
-      { kind: 'human', pid: host.id },
-      { kind: 'ai', level: 3 },
-      { kind: 'ai', level: 3 },
-      { kind: 'ai', level: 3 }
-    ],
-    settings: E.defaultSettings(),
+    seats: presetSeats(preset.seats, host.id),
+    settings: preset.settings ? E.sanitizeSettings(preset.settings) : E.defaultSettings(),
     screen: 'lobby',
     game: null,
     seatMap: null,
@@ -72,6 +81,7 @@ function createRoom(hostName) {
     deadlines: {},
     result: null,
     lastActive: Date.now(),
+    createdAt: Date.now(),
     endTimer: null
   };
   rooms.set(code, room);
@@ -107,6 +117,7 @@ function removeMember(room, m) {
   if (room.hostId === m.id) {
     const next = room.members.values().next().value;
     room.hostId = next ? next.id : null;
+    ensureHost(room);
   }
   if (!room.members.size) destroyRoom(room);
 }
@@ -140,7 +151,7 @@ function viewFor(room, m, evs) {
   const v = {
     now: Date.now(),
     code: room.code,
-    lan: lanUrls(),
+    lan: room.screen === 'lobby' ? lanUrls() : [],
     screen: room.screen,
     me: { id: m.id, name: m.name, isHost: room.hostId === m.id },
     lobby: {
@@ -198,6 +209,7 @@ function viewFor(room, m, evs) {
       pending: g.phase === 'choice' ? g.pending : null,
       exPending: g.phase === 'exchange' ? g.exPending : null,
       deadlines,
+      ack: ackViewFor(room, mySeat),
       timer: room.settings.timer,
       events: filterEvents(evs || [], mySeat)
     };
@@ -241,6 +253,7 @@ function startGame(room, again) {
   });
   room.screen = 'game';
   room.result = null;
+  room.exLog = [];
   clearAllTimers(room);
   afterChange(room);
 }
@@ -250,6 +263,7 @@ function clearAllTimers(room) {
   room.timers.clear();
   room.deadlines = {};
   if (room.endTimer) { clearTimeout(room.endTimer); room.endTimer = null; }
+  clearAck(room);
 }
 
 function calcDelay(evs) {
@@ -258,7 +272,7 @@ function calcDelay(evs) {
     if (e.t === 'play') d += 550;
     else if (e.t === 'effect') d += 650;
     else if (e.t === 'flow') d += 450;
-    else if (e.t === 'bomber') d += 1300;
+    else if (e.t === 'bomber') d += 2400;
     else if (e.t === 'give' || e.t === 'discard') d += 500;
     else if (e.t === 'exchange') d += 400;
     else if (e.t === 'pass') d += 250;
@@ -271,6 +285,18 @@ function afterChange(room) {
   const g = room.game;
   const evs = g.events;
   g.events = [];
+  const ack = buildAck(room, evs);
+  if (ack) {
+    startAck(room, ack, calcDelay(evs));
+    broadcast(room, evs);
+    return;
+  }
+  proceed(room, evs);
+}
+
+// 結果確認待ちの後に続く進行（ゲーム終了処理または次の手番の予約）
+function proceed(room, evs) {
+  const g = room.game;
   if (g.phase === 'end') {
     clearAllTimers(room);
     broadcast(room, evs);
@@ -300,9 +326,116 @@ function afterChange(room) {
   broadcast(room, evs);
 }
 
+// 人間が全員上がって残りがAIだけか
+function onlyAILeft(room, g) {
+  return g.players.every((p, i) => p.out || room.seatMap[i].kind === 'ai');
+}
+
+// ---------------------------------------------------------------- 結果確認（OK待ち）
+// クイーンボンバーとカード交換の結果は、表示対象の人間プレイヤー全員がOKを押すまで進行を止める
+function humanSeatConnected(room, seat) {
+  const ctrl = controllerOf(room, seat);
+  return !ctrl.ai;
+}
+
+function buildAck(room, evs) {
+  const g = room.game;
+  if (!room.exLog) room.exLog = [];
+  for (const e of evs) if (e.t === 'exchange') room.exLog.push(e);
+  const bomber = evs.find(e => e.t === 'bomber');
+  let ack = null;
+  if (bomber) {
+    const targets = [];
+    for (let s = 0; s < g.n; s++) targets.push(s);
+    ack = { kind: 'bomber', seat: bomber.seat, ranks: bomber.ranks.slice().sort((a, b) => a - b), losses: bomber.losses, targets };
+  } else if (g.phase !== 'exchange' && room.exLog.length) {
+    const log = room.exLog;
+    const targets = [];
+    for (const e of log) {
+      if (targets.indexOf(e.from) < 0) targets.push(e.from);
+      if (targets.indexOf(e.to) < 0) targets.push(e.to);
+    }
+    ack = { kind: 'exchange', log, targets };
+  }
+  if (g.phase !== 'exchange') room.exLog = [];
+  if (!ack) return null;
+  // 既に上がっていて手番が回ってこないプレイヤーには確認画面を出さない
+  ack.waiting = new Set(ack.targets.filter(s => !g.players[s].out && humanSeatConnected(room, s)));
+  if (!ack.waiting.size) return null;
+  return ack;
+}
+
+function startAck(room, ack, animDelay) {
+  // 確認中は手番・AI のタイマーをすべて止める
+  for (const t of room.timers.values()) if (t) clearTimeout(t);
+  room.timers.clear();
+  room.deadlines = {};
+  ack.id = rid(4);
+  room.ack = ack;
+  if (room.settings.timer.enabled) {
+    const total = room.settings.timer.seconds * 1000;
+    ack.deadline = { at: Date.now() + animDelay + total, total };
+    ack.timer = setTimeout(() => { if (room.ack === ack) finishAck(room); }, animDelay + total);
+  }
+}
+
+function clearAck(room) {
+  if (room.ack && room.ack.timer) clearTimeout(room.ack.timer);
+  room.ack = null;
+}
+
+function finishAck(room) {
+  clearAck(room);
+  if (!room.game || room.screen !== 'game') return;
+  proceed(room, []);
+}
+
+function ackSeat(room, seat) {
+  const ack = room.ack;
+  if (!ack) return;
+  ack.waiting.delete(seat);
+  if (!ack.waiting.size) finishAck(room);
+  else broadcast(room, []);
+}
+
+// 接続状態や席の変化で、確認待ちの対象から外れた席を除く
+function refreshAck(room) {
+  const ack = room.ack;
+  if (!ack) return;
+  for (const s of Array.from(ack.waiting)) if (!humanSeatConnected(room, s)) ack.waiting.delete(s);
+  if (!ack.waiting.size) finishAck(room);
+  else broadcast(room, []);
+}
+
+function ackViewFor(room, mySeat) {
+  const ack = room.ack;
+  if (!ack) return null;
+  const g = room.game;
+  const v = {
+    id: ack.id,
+    kind: ack.kind,
+    target: ack.targets.indexOf(mySeat) >= 0,
+    mine: ack.waiting.has(mySeat),
+    waiting: Array.from(ack.waiting).map(s => g.players[s].name),
+    deadline: ack.deadline || null
+  };
+  if (ack.kind === 'bomber') {
+    v.seat = ack.seat;
+    v.ranks = ack.ranks;
+    v.losses = ack.losses;
+  } else if (v.target) {
+    // カード交換は自分が関わった分だけを渡す
+    v.gave = ack.log.filter(e => e.from === mySeat).map(e => ({ to: e.to, cards: e.cards }));
+    v.got = ack.log.filter(e => e.to === mySeat).map(e => ({ from: e.from, cards: e.cards }));
+  }
+  return v;
+}
+
 function schedule(room, animDelay) {
   const g = room.game;
   if (!g || g.phase === 'end') return;
+  const fast = onlyAILeft(room, g);
+  if (fast) animDelay *= 0.35;
   const aw = E.awaiting(g);
   const keys = new Set();
   for (const a of aw) {
@@ -311,7 +444,8 @@ function schedule(room, animDelay) {
     if (room.timers.has(key)) continue;
     const ctrl = controllerOf(room, a.seat);
     if (ctrl.ai) {
-      const think = a.kind === 'turn' ? 380 + Math.random() * 420 : 450 + Math.random() * 300;
+      const think = fast ? 60 + Math.random() * 80
+        : a.kind === 'turn' ? 380 + Math.random() * 420 : 450 + Math.random() * 300;
       room.timers.set(key, setTimeout(() => runAI(room, a.seat, key, ctrl.level), animDelay + think));
     } else if (room.settings.timer.enabled) {
       const total = room.settings.timer.seconds * 1000;
@@ -334,6 +468,7 @@ function schedule(room, animDelay) {
 
 function rescheduleSeat(room, seat) {
   if (!room.game || room.screen !== 'game') return;
+  if (room.ack) { refreshAck(room); return; }
   for (const k of Array.from(room.timers.keys())) {
     const parts = k.split(':');
     if (+parts[1] === seat) {
@@ -362,7 +497,7 @@ function applyAction(room, seat, action) {
 }
 
 function runAI(room, seat, key, level) {
-  if (!keyValid(room, key) || !room.game) return;
+  if (!keyValid(room, key) || !room.game || room.ack) return;
   room.timers.delete(key);
   let action = null;
   try { action = AI.decide(room.game, seat, level); } catch (e) { console.error(e); }
@@ -371,24 +506,26 @@ function runAI(room, seat, key, level) {
 }
 
 function onTimeout(room, seat, key) {
-  if (!keyValid(room, key) || !room.game) return;
+  if (!keyValid(room, key) || !room.game || room.ack) return;
   room.timers.delete(key);
   delete room.deadlines[key];
   const g = room.game;
   const aw = E.awaiting(g).find(a => a.seat === seat);
   if (!aw) return;
   let action = null;
-  if (room.settings.timer.onTimeout === 'ai') {
-    action = AI.decide(g, seat, 3);
-  } else if (aw.kind === 'turn') {
-    action = g.fieldCombo ? { type: 'pass' } : AI.decide(g, seat, 2);
-  } else if (aw.kind === 'bomber') {
-    action = g.rules.bomberMustFull ? AI.decide(g, seat, 2) : { type: 'declare', ranks: [] };
-  } else if (aw.kind === 'exchange') {
-    action = AI.decideChoice(g, seat, 'exchange', 2);
-  } else {
-    action = { type: 'choose', cards: [] };
-  }
+  try {
+    if (room.settings.timer.onTimeout === 'ai') {
+      action = AI.decide(g, seat, 3);
+    } else if (aw.kind === 'turn') {
+      action = g.fieldCombo ? { type: 'pass' } : AI.decide(g, seat, 2);
+    } else if (aw.kind === 'bomber') {
+      action = g.rules.bomberMustFull ? AI.decide(g, seat, 2) : { type: 'declare', ranks: [] };
+    } else if (aw.kind === 'exchange') {
+      action = AI.decideChoice(g, seat, 'exchange', 2);
+    } else {
+      action = { type: 'choose', cards: [] };
+    }
+  } catch (e) { console.error(e); action = null; }
   applyAction(room, seat, action);
   afterChange(room);
 }
@@ -441,12 +578,12 @@ function handleLobbyAction(room, m, a) {
   if (!isHost) return { error: 'ホストのみ変更できます' };
   if (a.type === 'seatCount') {
     const n = parseInt(a.count, 10);
-    if (!(n >= 3 && n <= 5)) return { error: '人数は3〜5人です' };
+    if (!(n >= 3 && n <= 8)) return { error: '人数は3〜8人です' };
+    if (n < room.seats.length && room.seats.filter(s => s.kind !== 'human').length < room.seats.length - n) return { error: '人間の席は減らせません' };
     while (room.seats.length < n) room.seats.push({ kind: 'ai', level: 3 });
     while (room.seats.length > n) {
       let i = -1;
       for (let j = room.seats.length - 1; j >= 0; j--) if (room.seats[j].kind !== 'human') { i = j; break; }
-      if (i < 0) return { error: '人間の席は減らせません' };
       room.seats.splice(i, 1);
     }
     return { ok: true };
@@ -479,7 +616,7 @@ function handleLobbyAction(room, m, a) {
   }
   if (a.type === 'start') {
     if (room.seats.some(s => s.kind === 'open')) return { error: '空いている席があります。AIを入れるか参加を待ってください' };
-    if (room.seats.length < 3 || room.seats.length > 5) return { error: '人数は3〜5人です' };
+    if (room.seats.length < 3 || room.seats.length > 8) return { error: '人数は3〜8人です' };
     startGame(room, false);
     return { ok: true, started: true };
   }
@@ -489,6 +626,24 @@ function handleLobbyAction(room, m, a) {
 async function handleApi(req, res, url) {
   const p = url.pathname;
   if (p === '/api/info' && req.method === 'GET') return json(res, 200, { lan: lanUrls(), port: PORT });
+
+  if (p === '/api/rooms' && req.method === 'GET') {
+    const list = Array.from(rooms.values())
+      .filter(room => Array.from(room.members.values()).some(m => m.connected))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(room => {
+        const host = room.members.get(room.hostId);
+        return {
+          code: room.code,
+          hostName: host ? host.name : '?',
+          screen: room.screen,
+          humans: room.seats.filter(s => s.kind === 'human').length,
+          seats: room.seats.length,
+          joinable: room.screen === 'lobby' && room.seats.some(s => s.kind === 'open' || s.kind === 'ai')
+        };
+      });
+    return json(res, 200, { rooms: list });
+  }
 
   if (p === '/api/stream' && req.method === 'GET') {
     const room = rooms.get(String(url.searchParams.get('code') || '').toUpperCase());
@@ -550,7 +705,7 @@ async function handleApi(req, res, url) {
   try { body = await readBody(req); } catch (e) { return json(res, 400, { error: '不正なリクエストです' }); }
 
   if (p === '/api/create') {
-    const { room, member } = createRoom(body.name);
+    const { room, member } = createRoom(body.name, body.preset);
     return json(res, 200, { code: room.code, token: member.token });
   }
   if (p === '/api/join') {
@@ -603,16 +758,24 @@ async function handleApi(req, res, url) {
     const g = room.game;
     if (a.type === 'leave') {
       removeMember(room, m);
+      for (const st of m.streams) { try { st.end(); } catch (e) { /* */ } }
       if (!rooms.has(room.code)) return json(res, 200, { ok: true });
       const seat = room.seatMap.findIndex(s => s.kind === 'human' && s.pid === m.id);
       if (seat >= 0) {
         room.seatMap[seat] = { kind: 'ai', level: 3, name: room.seatMap[seat].name };
         rescheduleSeat(room, seat);
+      } else {
+        broadcast(room, []);
       }
       return json(res, 200, { ok: true });
     }
     const seat = room.seatMap.findIndex(s => s.kind === 'human' && s.pid === m.id);
     if (seat < 0) return json(res, 400, { error: '席がありません' });
+    if (a.type === 'ack') {
+      if (room.ack && (!a.id || a.id === room.ack.id)) ackSeat(room, seat);
+      return json(res, 200, { ok: true });
+    }
+    if (room.ack) return json(res, 400, { error: '結果の確認待ちです' });
     const r = E.act(g, seat, a);
     if (!r.ok) return json(res, 400, { error: r.error });
     afterChange(room);
@@ -635,13 +798,14 @@ const TYPES = {
 };
 
 function serveStatic(req, res, url) {
-  let p = decodeURIComponent(url.pathname);
+  let p;
+  try { p = decodeURIComponent(url.pathname); } catch (e) { res.writeHead(400); return res.end(); }
   let file;
   if (p === '/engine.js') file = path.join(ROOT, 'shared', 'engine.js');
   else {
     if (p === '/') p = '/index.html';
     file = path.normalize(path.join(PUBLIC, p));
-    if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
+    if (!file.startsWith(PUBLIC + path.sep)) { res.writeHead(403); return res.end(); }
   }
   fs.readFile(file, (e, data) => {
     if (e) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not found'); }
@@ -651,7 +815,8 @@ function serveStatic(req, res, url) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://localhost');
+  let url;
+  try { url = new URL(req.url, 'http://localhost'); } catch (e) { res.writeHead(400); return res.end(); }
   if (url.pathname.startsWith('/api/')) {
     handleApi(req, res, url).catch(e => { console.error(e); try { json(res, 500, { error: 'サーバーエラー' }); } catch (x) { /* */ } });
     return;

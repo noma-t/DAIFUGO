@@ -29,7 +29,9 @@
         fiveSkip: false,      // 5飛び
         sevenPass: false,     // 7渡し
         tenDiscard: false,    // 10捨て
+        passPersist: false,   // パス継続（パスしたら場が流れるまで出せない）
         jokers: 1,            // ジョーカーの枚数
+        jokerEffect: false,   // ジョーカーが代わりになった数字の効果（5飛び・7渡し・8切りなど）も発動させる
         finishBan: true,      // 上がり禁止
         banJoker: true,
         banTwo: true,
@@ -438,8 +440,13 @@
     }
     st.fieldCombo = cb;
     st.lastPlayer = seat;
+    // パス継続がオフなら、パスはその手番だけ。誰かが出したら全員また出せるようになる
+    if (!R.passPersist) st.players.forEach(pl => { pl.passed = false; });
 
-    const cnt = r => cb.reps.filter(x => x === r).length;
+    // 数字の効果の枚数。jokerEffect がオンならジョーカーが代わりになった数字も数える
+    const cnt = R.jokerEffect
+      ? r => cb.reps.filter(x => x === r).length
+      : r => cards.filter(c => c.r === r).length;
     let flow = false, skip = 0;
     if (prev && prev.jokerSingle) { eff(st, 'スペ3返し', seat); flow = true; }
     if (R.revolution && cb.type === 'multi' && cb.n >= 4) { st.revolution = !st.revolution; eff(st, '革命', seat); }
@@ -483,11 +490,12 @@
     finishPost(st);
   }
 
-  function sfbOn(st, kind) {
-    const R = st.rules;
+  // 特殊上がり禁止がその効果に適用されるか
+  function sfbBlocked(R, kind) {
     if (!R.specialFinishBan) return false;
-    return kind === 'bomber' ? R.sfbBomber : kind === 'give7' ? R.sfbSeven : R.sfbTen;
+    return kind === 'bomber' ? R.sfbBomber : kind === 'give7' ? R.sfbSeven : kind === 'discard10' ? R.sfbTen : false;
   }
+  function sfbOn(st, kind) { return sfbBlocked(st.rules, kind); }
 
   function doChoose(st, ids) {
     const pd = st.pending;
@@ -530,7 +538,7 @@
   function bomberSelectable(rules, hand, picks, max, rank) {
     if (picks.indexOf(rank) >= 0) return true;
     if (picks.length >= max) return false;
-    if (rules.specialFinishBan && rules.sfbBomber && hand.length) {
+    if (sfbBlocked(rules, 'bomber') && hand.length) {
       const after = picks.concat([rank]);
       if (hand.every(c => after.indexOf(c.r) >= 0)) return false;
     }
@@ -620,6 +628,11 @@
     if (post.flow) return doFlow(st, leaderFrom(st, seat));
     const others = activeSeats(st).filter(s => s !== seat && !st.players[s].passed);
     if (others.length === 0) return doFlow(st, leaderFrom(st, seat));
+    // 5飛びで残りの全員が飛ばされた（誰も出さずに出した本人へ戻る）なら場を流す
+    if (post.skip >= others.length) {
+      for (let s = nextSeat(st, seat, true), i = 0; i < others.length; i++, s = nextSeat(st, s, true)) ev(st, { t: 'skip', seat: s });
+      return doFlow(st, leaderFrom(st, seat));
+    }
     let t = nextSeat(st, seat, true);
     for (let i = 0; i < post.skip; i++) {
       ev(st, { t: 'skip', seat: t });
@@ -633,8 +646,10 @@
     ev(st, { t: 'pass', seat: seat });
     const lp = st.lastPlayer;
     const remaining = activeSeats(st).filter(s => !st.players[s].passed && s !== lp);
-    if (remaining.length === 0) return doFlow(st, leaderFrom(st, lp));
-    st.turn = nextSeat(st, seat, true);
+    const next = nextSeat(st, seat, true);
+    // 5飛びで飛ばされた人は passed にならないため、手番が最後に出した人へ戻った時点でも場を流す
+    if (remaining.length === 0 || next === lp) return doFlow(st, leaderFrom(st, lp));
+    st.turn = next;
   }
 
   function doFlow(st, leader) {
@@ -657,6 +672,6 @@
     makeDeck, shuffle, sortCards, strength, cardLabel,
     analyze, canBeat, validatePlay, legalMoves, legalMovesCtx, candidateSets, isBannedFinish,
     ctxOf, titleOf, bindLabel, newGame, act, awaiting, places,
-    bomberRankList, bomberSelectable, nextSeat
+    bomberRankList, bomberSelectable, nextSeat, sfbBlocked
   };
 });

@@ -15,7 +15,6 @@
   <section id="scr-title" class="screen">
     <div class="title-wrap">
       <h1 class="logo">大富豪</h1>
-      <p class="logo-sub">身内でサクッと遊べる、セルフホスト大富豪</p>
       <div class="panel title-panel">
         <label class="field-label" for="inName">なまえ</label>
         <input id="inName" class="text-in" maxlength="12" autocomplete="off" placeholder="プレイヤー">
@@ -25,12 +24,12 @@
             <button id="btnCreate" class="btn primary big">ルームを作る</button>
           </div>
           <div class="title-sep"></div>
-          <div class="title-col">
-            <label class="col-head" for="inCode">ルームコードで参加</label>
-            <div class="join-row">
-              <input id="inCode" class="text-in code-in" maxlength="4" autocomplete="off" placeholder="ABCD">
-              <button id="btnJoin" class="btn big">参加する</button>
+          <div class="title-col room-list-col">
+            <div class="room-list-head">
+              <span class="col-head">部屋一覧</span>
+              <button id="btnRefreshRooms" class="btn small">更新</button>
             </div>
+            <div id="roomList"></div>
           </div>
         </div>
         <p id="titleMsg" class="msg" role="alert"></p>
@@ -55,10 +54,6 @@
         </div>
       </div>
       <div id="seatList"></div>
-      <div class="invite">
-        <span class="muted">招待：ルームコードを伝えるか、下のURLを共有</span>
-        <div id="inviteList"></div>
-      </div>
     </div>
     <div class="panel lb-rules">
       <div class="panel-head"><span>ルール</span><span class="muted small-note" id="rulesNote"></span></div>
@@ -80,7 +75,10 @@
         <span id="bRev" class="badge">革命</span>
         <span id="bBack" class="badge">11バック</span>
       </div>
-      <div id="turnInfo" class="turn-info"></div>
+      <div class="tb-right">
+        <div id="turnInfo" class="turn-info"></div>
+        <button id="gLeave" class="btn small">退出</button>
+      </div>
     </div>
     <div id="felt"></div>
     <div id="opps"></div>
@@ -91,11 +89,13 @@
     <div id="hand"></div>
     <div id="mePanel">
       <span id="meInfo"></span>
+      <button id="autoPassToggle" class="toggle auto-pass-toggle" aria-pressed="false" title="出せるカードがないとき自動でパスする">自動パス OFF</button>
       <button id="btnPlay" class="btn primary act-btn">出す</button>
       <button id="btnPass" class="btn act-btn">パス</button>
     </div>
     <div id="choicePanel"></div>
     <div id="dialog"></div>
+    <div id="ackDialog"></div>
     <div id="fx"></div>
     <div id="ghost"></div>
     <div id="connNote"></div>

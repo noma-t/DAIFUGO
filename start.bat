@@ -14,7 +14,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-node "%~dp0server\server.js" --open
+node "%~dp0server\server.js"
 echo.
 echo  Server stopped.
 pause
