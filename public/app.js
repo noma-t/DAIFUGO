@@ -39,6 +39,7 @@
     if (S.screen === name) return;
     S.screen = name;
     document.querySelectorAll('.screen').forEach(el => el.classList.toggle('on', el.id === 'scr-' + name));
+    if (name === 'title') startRoomBrowser(); else stopRoomBrowser();
   }
 
   let toastTimer = null;
@@ -106,12 +107,12 @@
   }
   $('#btnCreate').addEventListener('click', async () => {
     try {
-      const r = await api('/api/create', { name: myName() });
+      const r = await api('/api/create', { name: myName(), isPublic: $('#inCreatePublic').checked });
       connect(r.code, r.token);
     } catch (e) { $('#titleMsg').textContent = e.message; }
   });
-  async function join() {
-    const code = inCode.value.trim().toUpperCase();
+  async function join(codeArg) {
+    const code = (typeof codeArg === 'string' ? codeArg : inCode.value).trim().toUpperCase();
     if (code.length !== 4) { $('#titleMsg').textContent = 'ルームコードは4文字です'; return; }
     let token = null;
     try { token = localStorage.getItem(storeKey(code)); } catch (e) { /* */ }
@@ -120,8 +121,44 @@
       connect(r.code, r.token);
     } catch (e) { $('#titleMsg').textContent = e.message; }
   }
-  $('#btnJoin').addEventListener('click', join);
+  $('#btnJoin').addEventListener('click', () => join());
   inCode.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+
+  // ---------------------------------------------------------------- 公開ルーム一覧
+  const ROOM_BROWSER_INTERVAL = 4000;
+  let roomBrowserTimer = null;
+  async function loadRoomBrowser() {
+    const list = $('#roomBrowserList');
+    let rooms;
+    try {
+      const r = await fetch('/api/rooms', { cache: 'no-store' });
+      rooms = (await r.json()).rooms || [];
+    } catch (e) {
+      list.innerHTML = '<div class="room-browser-empty muted">一覧を取得できませんでした</div>';
+      return;
+    }
+    if (S.screen !== 'title') return;
+    list.innerHTML = rooms.length
+      ? rooms.map(r => '<div class="room-row">' +
+          '<span class="room-row-code">' + esc(r.code) + '</span>' +
+          '<span class="room-row-host">' + esc(r.hostName) + ' のルーム</span>' +
+          '<span class="muted">人間 ' + r.humans + ' / ' + r.seats + '席</span>' +
+          '<button class="btn small" data-join-room="' + esc(r.code) + '">参加</button></div>').join('')
+      : '<div class="room-browser-empty muted">参加できる公開ルームはありません</div>';
+  }
+  function startRoomBrowser() {
+    stopRoomBrowser();
+    loadRoomBrowser();
+    roomBrowserTimer = setInterval(loadRoomBrowser, ROOM_BROWSER_INTERVAL);
+  }
+  function stopRoomBrowser() {
+    if (roomBrowserTimer) { clearInterval(roomBrowserTimer); roomBrowserTimer = null; }
+  }
+  $('#btnRoomBrowserRefresh').addEventListener('click', loadRoomBrowser);
+  $('#roomBrowserList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-join-room]');
+    if (b) join(b.dataset.joinRoom);
+  });
 
   // ---------------------------------------------------------------- 表示更新
   function onView(v) {
@@ -199,6 +236,13 @@
     });
     $('#inviteList').innerHTML = urls.map(u => '<div class="invite-row"><span class="invite-url">' + esc(u) + '</span><button class="btn small" data-copy="' + esc(u) + '">コピー</button></div>').join('');
 
+    const isPublic = L.visibility === 'public';
+    $('#btnVisibilityPrivate').classList.toggle('on', !isPublic);
+    $('#btnVisibilityPublic').classList.toggle('on', isPublic);
+    $('#btnVisibilityPrivate').disabled = !host;
+    $('#btnVisibilityPublic').disabled = !host;
+    $('#visibilityNote').textContent = isPublic ? 'タイトル画面の一覧に表示中' : 'コード・URLを知っている人だけ参加可';
+
     const st = L.settings;
     const R = st.rules, T = st.timer;
     $('#rulesNote').textContent = host ? 'クリックで切り替え' : '';
@@ -259,6 +303,8 @@
       updateSettings(s => { s.rules.jokers = x; });
     } else if (b.dataset.timer) {
       updateSettings(s => { s.timer.enabled = !s.timer.enabled; });
+    } else if (b.dataset.visibility) {
+      send({ type: 'visibility', value: b.dataset.visibility }).catch(() => {});
     } else if (b.dataset.timeout) {
       const x = b.dataset.timeout;
       updateSettings(s => { s.timer.onTimeout = x; });

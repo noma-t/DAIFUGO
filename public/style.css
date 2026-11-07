@@ -73,8 +73,8 @@ button, input, select { font-family: inherit; }
 
 /* ---------- タイトル ---------- */
 .title-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
-.logo { margin: 0; font-size: 96px; font-weight: normal; color: var(--accent); letter-spacing: 0.15em; text-shadow: 6px 6px 0 var(--ink); }
-.logo-sub { margin: 0 0 24px; color: var(--muted); font-size: 18px; }
+.logo { margin: 0; font-size: 64px; font-weight: normal; color: var(--accent); letter-spacing: 0.15em; text-shadow: 6px 6px 0 var(--ink); }
+.logo-sub { margin: 0 0 12px; color: var(--muted); font-size: 18px; }
 .title-panel { width: 760px; padding: 28px; display: flex; flex-direction: column; gap: 14px; }
 .field-label, .col-head { font-size: 16px; color: var(--muted); }
 .text-in { height: 48px; padding: 0 14px; font-size: 22px; background: var(--card); color: var(--bg); border: 3px solid var(--ink); outline: none; }
@@ -84,6 +84,17 @@ button, input, select { font-family: inherit; }
 .title-col { flex: 1; display: flex; flex-direction: column; gap: 10px; }
 .title-sep { width: 3px; background: var(--ink); }
 .join-row { display: flex; gap: 12px; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.check-row input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.room-browser { width: 760px; padding: 16px 28px; display: flex; flex-direction: column; }
+.room-browser .panel-head { margin-bottom: 8px; }
+#roomBrowserList { display: flex; flex-direction: column; gap: 6px; height: 104px; overflow-y: auto; }
+#roomBrowserList::-webkit-scrollbar { width: 10px; }
+#roomBrowserList::-webkit-scrollbar-thumb { background: var(--btn2); border: 2px solid var(--ink); }
+.room-row { display: flex; align-items: center; gap: 14px; padding: 6px 10px; background: var(--bg); border: 3px solid var(--ink); font-size: 16px; }
+.room-row-code { color: var(--accent); letter-spacing: 0.1em; }
+.room-row-host { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-browser-empty { padding: 10px; font-size: 15px; }
 
 /* ---------- ルームトップ ---------- */
 .lb-seats { position: absolute; left: 40px; top: 72px; width: 450px; height: 560px; padding: 18px; display: flex; flex-direction: column; }
@@ -104,6 +115,8 @@ button, input, select { font-family: inherit; }
 .seg button.on { background: var(--accent); color: var(--bg); }
 .seg button:disabled { cursor: default; }
 .seg button:disabled:not(.on) { color: #6c6a85; }
+.visibility-box { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.visibility-box .muted { font-size: 13px; }
 .invite { margin-top: auto; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 #inviteList { display: flex; flex-direction: column; gap: 6px; }
 .invite-row { display: flex; align-items: center; gap: 8px; }

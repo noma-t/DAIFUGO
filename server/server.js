@@ -49,7 +49,7 @@ function lanUrls() {
 }
 
 // ---------------------------------------------------------------- ルーム
-function createRoom(hostName) {
+function createRoom(hostName, isPublic) {
   const code = newCode();
   const host = { id: rid(6), token: rid(16), name: cleanName(hostName), connected: false, streams: new Set(), dcTimer: null, leftTimer: null };
   const room = {
@@ -63,6 +63,8 @@ function createRoom(hostName) {
       { kind: 'ai', level: 3 }
     ],
     settings: E.defaultSettings(),
+    // 'private'：コード／招待URLでのみ参加可。'public'：タイトル画面の公開ルーム一覧に表示
+    visibility: isPublic ? 'public' : 'private',
     screen: 'lobby',
     game: null,
     seatMap: null,
@@ -72,6 +74,7 @@ function createRoom(hostName) {
     deadlines: {},
     result: null,
     lastActive: Date.now(),
+    createdAt: Date.now(),
     endTimer: null
   };
   rooms.set(code, room);
@@ -152,6 +155,7 @@ function viewFor(room, m, evs) {
         return { kind: s.kind, level: s.level };
       }),
       settings: room.settings,
+      visibility: room.visibility,
       gameNo: room.gameNo
     }
   };
@@ -439,6 +443,11 @@ function handleLobbyAction(room, m, a) {
     return { ok: true };
   }
   if (!isHost) return { error: 'ホストのみ変更できます' };
+  if (a.type === 'visibility') {
+    if (a.value !== 'public' && a.value !== 'private') return { error: '無効な操作です' };
+    room.visibility = a.value;
+    return { ok: true };
+  }
   if (a.type === 'seatCount') {
     const n = parseInt(a.count, 10);
     if (!(n >= 3 && n <= 5)) return { error: '人数は3〜5人です' };
@@ -486,9 +495,34 @@ function handleLobbyAction(room, m, a) {
   return { error: '無効な操作です' };
 }
 
+// 公開ルーム一覧：ルームトップにいて、空席かAI席があり、誰かが接続中のルームのみ
+function publicRooms() {
+  const out = [];
+  for (const room of rooms.values()) {
+    if (room.visibility !== 'public' || room.screen !== 'lobby') continue;
+    const members = Array.from(room.members.values());
+    if (!members.some(m => m.connected)) continue;
+    const humans = room.seats.filter(s => s.kind === 'human').length;
+    if (humans >= room.seats.length) continue;
+    const host = room.members.get(room.hostId);
+    out.push({
+      code: room.code,
+      hostName: host ? host.name : '?',
+      humans,
+      seats: room.seats.length,
+      createdAt: room.createdAt
+    });
+  }
+  return out.sort((a, b) => b.createdAt - a.createdAt).slice(0, 50).map(r => {
+    delete r.createdAt;
+    return r;
+  });
+}
+
 async function handleApi(req, res, url) {
   const p = url.pathname;
   if (p === '/api/info' && req.method === 'GET') return json(res, 200, { lan: lanUrls(), port: PORT });
+  if (p === '/api/rooms' && req.method === 'GET') return json(res, 200, { rooms: publicRooms() });
 
   if (p === '/api/stream' && req.method === 'GET') {
     const room = rooms.get(String(url.searchParams.get('code') || '').toUpperCase());
@@ -550,7 +584,7 @@ async function handleApi(req, res, url) {
   try { body = await readBody(req); } catch (e) { return json(res, 400, { error: '不正なリクエストです' }); }
 
   if (p === '/api/create') {
-    const { room, member } = createRoom(body.name);
+    const { room, member } = createRoom(body.name, body.isPublic === true);
     return json(res, 200, { code: room.code, token: member.token });
   }
   if (p === '/api/join') {
