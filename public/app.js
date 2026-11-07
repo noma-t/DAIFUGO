@@ -917,7 +917,7 @@
     if (S.ackId !== ack.id) {
       S.ackId = ack.id;
       // カードが飛ぶ演出を見せてから開く
-      S.ackShowAt = Date.now() + (ack.kind === 'bomber' ? 1500 : 900);
+      S.ackShowAt = Date.now() + (ack.kind === 'bomber' ? 0 : 900);
     }
     const wait = S.ackShowAt - Date.now();
     if (wait > 0) {
@@ -1088,21 +1088,25 @@
     const evs = g.events || [];
     for (const e of evs) {
       if (e.t === 'effect') {
+        // クイーンボンバーは結果確認ポップアップが自分に出る場合は帯を省く（上がり済み等でポップアップが出ない人だけ帯で知らせる）
+        if (e.rule === 'クイーンボンバー' && g.ack && g.ack.mine) continue;
         queueBanner(e.rule, nameOf(g, e.seat), e.chips);
       } else if (e.t === 'finish') {
         queueBanner('上がり', nameOf(g, e.seat), []);
       } else if (e.t === 'bomber') {
+        // 帯を出さない（結果ポップアップが出る）場合は帯の演出待ちが不要なので、すぐカードを飛ばす
+        const flyDelay = g.ack && g.ack.mine ? 100 : 850;
         Object.keys(e.losses).forEach(k => {
           const s = +k;
           const cards = e.losses[k];
           cards.forEach((c, i) => {
             if (s === g.mySeat && oldPos[c.id]) {
               const el = cardEl(c, 'mark');
-              flyEl(el, oldPos[c.id], PILE_PT, 850);
+              flyEl(el, oldPos[c.id], PILE_PT, flyDelay);
             } else {
               const p = seatPoint(g, s, i);
               const el = cardEl(c, 'sm mark');
-              flyEl(el, { x: p.x, y: p.y - 66 }, PILE_PT, 850, { pop: true });
+              flyEl(el, { x: p.x, y: p.y - 66 }, PILE_PT, flyDelay, { pop: true });
             }
           });
         });
