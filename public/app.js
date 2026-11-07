@@ -50,6 +50,52 @@
     toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
   }
 
+  // ---------------------------------------------------------------- 効果音
+  const SFX = (() => {
+    const NAMES = ['select', 'deselect', 'play', 'pass', 'flow', 'turn'];
+    const VOLUME = 0.6, POOL_MAX = 4;
+    const pools = {};
+    NAMES.forEach(n => {
+      const a = new Audio('/sfx/' + n + '.wav');
+      a.preload = 'auto';
+      pools[n] = [a];
+    });
+    let muted = false;
+    try { muted = localStorage.getItem('daifugo:muted') === '1'; } catch (e) { /* */ }
+
+    // 同じ音が重なっても鳴るよう、再生中でない Audio を使い回す
+    function play(name, delay) {
+      if (muted || !pools[name]) return;
+      if (delay) { setTimeout(() => play(name), delay); return; }
+      const pool = pools[name];
+      let a = pool.find(x => x.paused || x.ended);
+      if (!a) {
+        if (pool.length >= POOL_MAX) return;
+        a = pool[0].cloneNode();
+        pool.push(a);
+      }
+      a.volume = VOLUME;
+      try { a.currentTime = 0; } catch (e) { /* */ }
+      const p = a.play();
+      if (p && p.catch) p.catch(() => {});
+    }
+
+    const btn = $('#btnSound');
+    function render() {
+      btn.textContent = muted ? '🔇' : '🔊';
+      btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+      btn.setAttribute('aria-label', muted ? '効果音をオンにする' : '効果音をオフにする');
+    }
+    btn.addEventListener('click', () => {
+      muted = !muted;
+      try { localStorage.setItem('daifugo:muted', muted ? '1' : '0'); } catch (e) { /* */ }
+      render();
+      play('select');
+    });
+    render();
+    return { play };
+  })();
+
   // ---------------------------------------------------------------- 通信
   async function api(path, body) {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -588,12 +634,13 @@
     if (!g || g.mySeat < 0) return;
     const cm = choiceMode(g);
     if (cm) {
-      if (S.csel.has(id)) S.csel.delete(id);
+      if (S.csel.has(id)) { S.csel.delete(id); SFX.play('deselect'); }
       else {
         if (S.csel.size >= cm.max) {
           if (cm.max === 1) S.csel.clear(); else return;
         }
         S.csel.add(id);
+        SFX.play('select');
       }
     } else {
       if (S.sel.has(id)) {
@@ -601,7 +648,9 @@
         const gr = S.groups.find(x => x.has(id));
         if (gr) { gr.forEach(x => S.sel.delete(x)); S.groups = S.groups.filter(x => x !== gr); }
         else S.sel.delete(id);
+        SFX.play('deselect');
       } else if (!selectPlayable(g, id)) return;
+      else SFX.play('select');
     }
     refreshHand();
   }
@@ -770,8 +819,8 @@
     if (b.dataset.rank) {
       const r = +b.dataset.rank;
       const i = S.picks.indexOf(r);
-      if (i >= 0) S.picks.splice(i, 1);
-      else if (S.picks.length < g.pending.max) S.picks.push(r);
+      if (i >= 0) { S.picks.splice(i, 1); SFX.play('deselect'); }
+      else if (S.picks.length < g.pending.max) { S.picks.push(r); SFX.play('select'); }
       drawBomber(g);
     } else if (b.id === 'bmOk') {
       const ranks = S.picks.slice();
@@ -828,7 +877,20 @@
     return d;
   }
 
+  // 1回の更新で同じ種類の音は1度だけ鳴らし、種類が違えば少しずらして順に鳴らす
+  function playEventSounds(g, prevG) {
+    const evs = g.events || [];
+    const has = t => evs.some(e => e.t === t);
+    let delay = 0;
+    if (has('play')) { SFX.play('play'); delay += 180; }
+    if (has('pass')) { SFX.play('pass', delay); delay += 180; }
+    if (has('flow')) { SFX.play('flow', delay); delay += 300; }
+    const waiting = x => !!x && (myTurn(x) || !!choiceMode(x));
+    if (waiting(g) && !waiting(prevG)) SFX.play('turn', delay);
+  }
+
   function processEvents(g, prevG, oldPos) {
+    playEventSounds(g, prevG);
     const evs = g.events || [];
     for (const e of evs) {
       if (e.t === 'effect') {

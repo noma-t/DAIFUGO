@@ -630,6 +630,7 @@ const TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
+  '.wav': 'audio/wav',
   '.json': 'application/json; charset=utf-8'
 };
 
