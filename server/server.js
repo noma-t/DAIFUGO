@@ -599,6 +599,13 @@ async function handleApi(req, res, url) {
     broadcast(room, []);
     return json(res, 200, { code: room.code, token: r.member.token });
   }
+  if (p === '/api/verify') {
+    // 参加状態の確認のみ（新規参加はしない）。SSE切断後にクライアントが席の有無を判定するのに使う
+    const room = rooms.get(String(body.code || '').toUpperCase());
+    const m = room && memberByToken(room, body.token);
+    if (!m) return json(res, 404, { error: 'ルームが見つかりません' });
+    return json(res, 200, { ok: true });
+  }
   if (p === '/api/action') {
     const room = rooms.get(String(body.code || '').toUpperCase());
     const m = room && memberByToken(room, body.token);

@@ -79,12 +79,26 @@
       onView(v);
     };
     es.onerror = () => {
-      if (es.readyState === 2) {
-        leaveToTitle('ルームに接続できませんでした');
-      } else {
-        $('#connNote').textContent = '再接続中…';
-      }
+      $('#connNote').textContent = '再接続中…';
+      // CLOSED はページ離脱時の切断や一時的なネットワーク断でも起きるため、
+      // サーバーに席が残っているか確かめてから退出か再接続かを決める
+      if (es.readyState === 2) verifyAndReconnect(es);
     };
+  }
+
+  const VERIFY_RETRY_MS = 2000;
+  async function verifyAndReconnect(es) {
+    if (S.es !== es) return;
+    const code = S.code, token = S.token;
+    let status = 0;
+    try {
+      const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, token }) });
+      status = r.status;
+    } catch (e) { /* ネットワーク断：再試行 */ }
+    if (S.es !== es) return;
+    if (status === 404) leaveToTitle('ルームに接続できませんでした');
+    else if (status === 200) connect(code, token);
+    else setTimeout(() => verifyAndReconnect(es), VERIFY_RETRY_MS);
   }
 
   function leaveToTitle(msg) {
