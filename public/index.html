@@ -22,6 +22,10 @@
           <div class="title-col">
             <span class="col-head">ルームを作る</span>
             <button id="btnCreate" class="btn primary big">ルームを作る</button>
+            <label class="check-row" for="inCreatePublic">
+              <input type="checkbox" id="inCreatePublic">
+              <span>公開ルームにする<span class="muted">（一覧に表示されます）</span></span>
+            </label>
           </div>
           <div class="title-sep"></div>
           <div class="title-col room-list-col">
@@ -30,6 +34,10 @@
               <button id="btnRefreshRooms" class="btn small">更新</button>
             </div>
             <div id="roomList"></div>
+            <div class="join-row">
+              <input id="inCode" class="text-in" maxlength="4" autocomplete="off" placeholder="コード" aria-label="ルームコード">
+              <button id="btnJoin" class="btn">コードで参加</button>
+            </div>
           </div>
         </div>
         <p id="titleMsg" class="msg" role="alert"></p>
@@ -42,6 +50,13 @@
     <div class="topbar">
       <div class="tb-left"><span class="room-code" id="lbCode"></span><span class="muted" id="lbCount"></span></div>
       <div class="tb-mid muted" id="lbHostNote"></div>
+      <div class="visibility-box" id="visibilityBox">
+        <div class="seg" role="group" aria-label="ルームの公開設定">
+          <button data-visibility="private" id="btnVisibilityPrivate">プライベート</button>
+          <button data-visibility="public" id="btnVisibilityPublic">公開</button>
+        </div>
+        <span class="muted" id="visibilityNote"></span>
+      </div>
       <button id="lbLeave" class="btn small">退出</button>
     </div>
     <div class="panel lb-seats">

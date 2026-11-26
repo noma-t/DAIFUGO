@@ -128,12 +128,26 @@
       onView(v);
     };
     es.onerror = () => {
-      if (es.readyState === 2) {
-        leaveToTitle('ルームに接続できませんでした');
-      } else {
-        $('#connNote').textContent = '再接続中…';
-      }
+      $('#connNote').textContent = '再接続中…';
+      // CLOSED はページ離脱時の切断や一時的なネットワーク断でも起きるため、
+      // サーバーに席が残っているか確かめてから退出か再接続かを決める
+      if (es.readyState === 2) verifyAndReconnect(es);
     };
+  }
+
+  const VERIFY_RETRY_MS = 2000;
+  async function verifyAndReconnect(es) {
+    if (S.es !== es) return;
+    const code = S.code, token = S.token;
+    let status = 0;
+    try {
+      const r = await fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, token }) });
+      status = r.status;
+    } catch (e) { /* ネットワーク断：再試行 */ }
+    if (S.es !== es) return;
+    if (status === 404) leaveToTitle('ルームに接続できませんでした');
+    else if (status === 200) connect(code, token);
+    else setTimeout(() => verifyAndReconnect(es), VERIFY_RETRY_MS);
   }
 
   function leaveToTitle(msg) {
@@ -172,11 +186,13 @@
 
   $('#btnCreate').addEventListener('click', async () => {
     try {
-      const r = await api('/api/create', { name: myName(), preset: loadPreset() });
+      const r = await api('/api/create', { name: myName(), preset: loadPreset(), isPublic: $('#inCreatePublic').checked });
       connect(r.code, r.token);
     } catch (e) { $('#titleMsg').textContent = e.message; }
   });
   async function joinRoom(code) {
+    code = String(code || '').trim().toUpperCase();
+    if (code.length !== 4) { $('#titleMsg').textContent = 'ルームコードは4文字です'; return; }
     let token = null;
     try { token = localStorage.getItem(storeKey(code)); } catch (e) { /* */ }
     try {
@@ -185,20 +201,33 @@
     } catch (e) { $('#titleMsg').textContent = e.message; loadRooms(); }
   }
 
-  // 立っている部屋の一覧（手動更新）
+  // 再入室トークンを持っているルームのコード（プライベートでも一覧に「戻る」を出すため）
+  function myRoomCodes() {
+    const codes = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        const m = k && k.match(/^daifugo:([A-Z0-9]{4})$/);
+        if (m) codes.push(m[1]);
+      }
+    } catch (e) { /* */ }
+    return codes;
+  }
+
+  // 部屋一覧（手動更新）：公開ルームと自分が入っているルーム
   const ROOM_STATUS = { lobby: '募集中', game: 'ゲーム中', result: 'リザルト' };
   async function loadRooms() {
     const list = $('#roomList');
     let rooms;
     try {
-      const r = await fetch('/api/rooms', { cache: 'no-store' });
+      const r = await fetch('/api/rooms?mine=' + encodeURIComponent(myRoomCodes().join(',')), { cache: 'no-store' });
       if (!r.ok) throw new Error();
       rooms = (await r.json()).rooms || [];
     } catch (e) {
       $('#titleMsg').textContent = '部屋一覧を取得できませんでした';
       return;
     }
-    if (!rooms.length) { list.innerHTML = '<p class="room-empty muted">立っている部屋はありません</p>'; return; }
+    if (!rooms.length) { list.innerHTML = '<p class="room-empty muted">参加できる公開ルームはありません</p>'; return; }
     list.innerHTML = rooms.map(rm => {
       let token = null;
       try { token = localStorage.getItem(storeKey(rm.code)); } catch (e) { /* */ }
@@ -219,6 +248,10 @@
     joinRoom(b.dataset.code);
   });
   $('#btnRefreshRooms').addEventListener('click', () => { $('#titleMsg').textContent = ''; loadRooms(); });
+  // プライベートルームはコード入力で参加
+  const inCode = $('#inCode');
+  $('#btnJoin').addEventListener('click', () => joinRoom(inCode.value));
+  inCode.addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(inCode.value); });
 
   // ---------------------------------------------------------------- 表示更新
   function onView(v) {
@@ -292,6 +325,13 @@
       return '<div class="seat"><span class="seat-no">' + (i + 1) + '</span>' + body + '</div>';
     }).join('');
 
+    const isPublic = L.visibility === 'public';
+    $('#btnVisibilityPrivate').classList.toggle('on', !isPublic);
+    $('#btnVisibilityPublic').classList.toggle('on', isPublic);
+    $('#btnVisibilityPrivate').disabled = !host;
+    $('#btnVisibilityPublic').disabled = !host;
+    $('#visibilityNote').textContent = isPublic ? 'タイトル画面の一覧に表示中' : 'コード・URLを知っている人だけ参加可';
+
     const st = L.settings;
     const R = st.rules, T = st.timer;
     $('#rulesNote').textContent = host ? 'クリックで切り替え' : '';
@@ -352,6 +392,8 @@
       updateSettings(s => { s.rules.jokers = x; });
     } else if (b.dataset.timer) {
       updateSettings(s => { s.timer.enabled = !s.timer.enabled; });
+    } else if (b.dataset.visibility) {
+      send({ type: 'visibility', value: b.dataset.visibility }).catch(() => {});
     } else if (b.dataset.timeout) {
       const x = b.dataset.timeout;
       updateSettings(s => { s.timer.onTimeout = x; });
@@ -1287,6 +1329,8 @@
     }
     show('title');
     loadRooms();
+    // 招待URL（?room=CODE）から来た場合は、コード欄に入れておく（プライベートルームでもそのまま参加できる）
+    if (/^[A-Z0-9]{4}$/.test(code)) inCode.value = code;
     inName.focus();
   })();
 })();
